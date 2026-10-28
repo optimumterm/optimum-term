@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/ghostty-vt-sys", "crates/ghostty-vt", "crates/optimum-core", "crates/optimum-win", "crates/optimum", "crates/optimum-icon"]
+members = ["crates/ghostty-vt-sys", "crates/ghostty-vt", "crates/optimum-core", "crates/optimum-win", "crates/optimum-mac", "crates/optimum", "crates/optimum-icon"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,7 @@ ghostty-vt-sys = { path = "crates/ghostty-vt-sys" }
 ghostty-vt = { path = "crates/ghostty-vt" }
 optimum-core = { path = "crates/optimum-core" }
 optimum-win = { path = "crates/optimum-win" }
+optimum-mac = { path = "crates/optimum-mac" }
 optimum-icon = { path = "crates/optimum-icon" }
 
 [workspace.lints.clippy]
