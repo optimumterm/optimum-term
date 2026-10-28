@@ -8,11 +8,11 @@ Current state: **M8 (release packaging)**: README, zip packaging, the Inno Setup
 |---|---|---|
 | `ghostty-vt-sys` | present | `build.rs` runs `zig build -Demit-lib-vt=true` on `vendor/ghostty`, links the static library, generates bindings with `bindgen` from `include/ghostty/vt.h`. No hand-written code. |
 | `ghostty-vt` | present | Safe wrapper. Owns every `unsafe` call into `ghostty-vt-sys`. |
-| `optimum-core` | present | `Pty` trait, `PtyEvent`, `GridSize`, `Session` (owns the one `Terminal`, its `RenderState` and the one `Pty`), `Frame` (rows of resolved cells + cursor, with dirty flags), layout (`grid_size`, `scale`, `CellSize`), `Rgb`, `Theme`. Later: config, selection. |
-| `optimum-win` | partial | `app` (run loop, the one `App`, window procedure, event queue), `window` (frameless helpers, hit testing), `renderer` (D3D11 pipeline, instance building, cursor), `font` (DirectWrite fonts, metrics, fallback, rasterization), `atlas` (glyph cache + packing), `shader.hlsl`, `instance`, `conpty`, `pty`, `wsl`. Later: input, overlays. |
-| `optimum-mac` | later | AppKit, Metal, CoreText. |
+| `optimum-core` | present | `Pty` trait, `PtyEvent`, `GridSize`, `Session` (owns the one `Terminal`, its `RenderState` and the one `Pty`), `Frame` (rows of resolved cells + cursor, with dirty flags), layout (`grid_size`, `scale`, `CellSize`), `Rgb`, `Theme`, config, and `scene` (glyph atlas packing, `Instance` building for rows, cursor, overlay, error strip and preedit over a platform `GlyphSource`, ADR-028). |
+| `optimum-win` | present | `app` (run loop, the one `App`, window procedure, event queue), `window` (frameless helpers, hit testing, full screen), `renderer` (D3D11 pipeline: uploads the scene's glyphs, draws its instances), `font` (DirectWrite fonts, metrics, fallback, rasterization; implements `GlyphSource`), `shader.hlsl`, `keyboard`, `ime`, `clipboard`, `settings`, `instance`, `conpty`, `pty`, `wsl`, `tuner` (debug only). |
+| `optimum-mac` | first version, unverified | `app` (the one `App` in a main-thread `RefCell`, PTY and settings messages delivered on the main dispatch queue, side effects run after the borrow ends), `view` (`TerminalView`: `NSView` + `NSTextInputClient`; `AppDelegate`: app and window delegate), `renderer` (Metal), `font` (CoreText `GlyphSource`), `shader.metal`, `keyboard` (key codes, modifiers, shortcuts), `settings`, `instance` (flock + `NSRunningApplication`), `pty` (`UnixPty`), `shell` (login shell). `pty`, `shell` and `keyboard` are tested on Linux too (ADR-028, ADR-029). |
 | `optimum-linux` | later | Window system, GPU API and rasterizer to be decided. |
-| `optimum` | present | Binary (`windows` subsystem); on Windows calls `optimum_win::run()`. |
+| `optimum` | present | Binary (`windows` subsystem on Windows); calls `optimum_win::run()` on Windows and `optimum_mac::run()` on macOS. |
 | `optimum-icon` | present | Build helper: turns `assets/optimum.ico` into a `.res` and links it into a binary (ADR-016). Used by `optimum`. |
 
 Dependency direction:

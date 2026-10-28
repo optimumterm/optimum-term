@@ -2,7 +2,7 @@
 
 A minimal terminal for Windows, made mainly for WSL.
 
-One window, no tabs, no splits, no title bar. Text is rendered with DirectWrite and aims to look as sharp as possible. The terminal core is [libghostty-vt](https://github.com/ghostty-org/ghostty). macOS and Linux versions are planned.
+One window, no tabs, no splits, no title bar. Text is rendered with DirectWrite and aims to look as sharp as possible. The terminal core is [libghostty-vt](https://github.com/ghostty-org/ghostty). An early macOS version exists (see [macOS](#macos)); Linux is planned.
 
 The name comes from the Wooting Optimum keyboard.
 
@@ -98,6 +98,30 @@ blur = false              # blur behind the window when opacity < 1
 ```
 
 JetBrains Mono Nerd Font is bundled, so prompt and file icons work out of the box. With `opacity` below 1, text uses grayscale antialiasing, because ClearType needs an opaque background.
+
+## macOS
+
+The macOS version is early and not tested much yet. It needs an Apple Silicon Mac with macOS 13 or newer. It opens your login shell (the one set for your user, usually zsh) in your home folder.
+
+Download `Optimum-<version>-macos-arm64.zip` from the [releases page](../../releases), unzip it and move `Optimum.app` to Applications. The app isn't signed or notarized yet, so macOS will refuse to open it. Run this once in Terminal:
+
+```
+xattr -dr com.apple.quarantine /Applications/Optimum.app
+```
+
+It works like the Windows version, with Mac shortcuts:
+
+| Action | How |
+|---|---|
+| Copy, paste, select all | `Cmd+C`, `Cmd+V`, `Cmd+A`. Selecting with the mouse also copies; right-click pastes. |
+| Change or clear the selection | `Shift+arrows`, `Cmd+Shift+←/→`, `Esc` |
+| Scroll back | Trackpad or wheel, `Shift+PageUp/PageDown`, `Cmd+↑/↓`, `Cmd+Home/End` |
+| Font size | `Cmd+=` / `Cmd+-` / `Cmd+0` |
+| Full screen | `Ctrl+Cmd+F` |
+| Close, minimize, hide, quit | `Cmd+W`, `Cmd+M`, `Cmd+H`, `Cmd+Q` |
+| Settings | `Cmd+,` opens `~/Library/Application Support/Optimum/config.toml` |
+
+The Option key types characters (like `å`); it is not used as Meta.
 
 ## tmux
 

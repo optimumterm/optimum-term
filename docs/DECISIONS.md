@@ -358,6 +358,7 @@ ADR-style log. Each entry: decision, date, why.
 - **Images:** `installer/wizard-{100,125,150,200}.bmp` (164×314 at 100%) and `wizard-small-*.bmp` (55×55 at 100%), generated from the icon.
 - **Tooling:** Inno Setup 6.7.3, sha256 `9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732` for `innosetup-6.7.3.exe`. The release workflow downloads it from the jrsoftware/issrc GitHub release, checks this hash and installs it portable (Chocolatey has no 6.7.3 package); locally it is the same portable install outside the repo. Inno Setup's licence allows redistributing installers built with it.
 - **`optimum-icon`** goes back to embedding only the icon.
+- **Icon refresh:** `ChangesAssociations=yes` makes Setup and Uninstall tell Explorer to refresh icons at the end, so shortcuts don't keep an icon cached from an earlier build at the same path.
 - **Verified:** the script compiles with ISCC 6.7.3 into a 5 MB installer. The wizard is checked by hand on Windows.
 
 ## ADR-026: Standard system shortcuts
@@ -382,3 +383,28 @@ ADR-style log. Each entry: decision, date, why.
   - **Full screen:** `F11` or `Alt+Enter` toggles. The window drops `WS_OVERLAPPEDWINDOW` for `WS_POPUP`, covers its monitor (`rcMonitor`), loses rounded corners, and hit-tests as client only (no drag strip or resize edges). Leaving restores the style, corners and the saved `WINDOWPLACEMENT`, including the maximized state.
   - **Shift+click** with an active selection moves its end to the clicked cell and keeps the start; dragging with Shift held keeps extending; the result is copied on release. Without a selection, Shift+click starts a normal selection (the Shift mouse override from ADR-017 still applies).
 - **Rejected:** a double `Esc` to close the window. Programs use `Esc Esc` all the time (Claude Code, vim, fzf, zsh vi-mode), and closing has no confirmation (ADR-021).
+
+## ADR-028: macOS port, first steps
+
+- **Date:** 2026-10-28
+- **Decision:** the macOS port starts now. Targets: **Apple Silicon only** (`aarch64-apple-darwin`), macOS 13 or newer. Intel Macs are not built.
+- **Development loop:** code is written in WSL. `cargo-zigbuild check/clippy --target aarch64-apple-darwin` works there without an Apple SDK (Zig cross-builds libghostty-vt for `aarch64-macos`); linking and tests need macOS, so CI runs a `macos-15` job (`cargo clippy` + `cargo test`). There is no remote access to a Mac: builds are checked by hand from CI artifacts.
+- **PTY:** `UnixPty` in `optimum-mac` uses `openpty`, `setsid` + `TIOCSCTTY` in the child, `TIOCSWINSZ` for resize, a reader thread and a waiter thread, the same shape as `WinPty`. The shell is the user's login shell from `getpwuid_r` (then `$SHELL`, then `/bin/zsh`), started as a login shell (`argv[0]` = `-zsh`) in the home directory, with `TERM`, `COLORTERM`, `TERM_PROGRAM`, `TERM_PROGRAM_VERSION` set. The module only needs Unix, so its tests also run on Linux; it can move to a shared crate when the Linux port starts.
+- **Shared rendering:** the glyph atlas and the instance building (rows, backgrounds, underline/strikethrough, cursor shapes, overlay panel, error strip, IME preedit) moved from `optimum-win` into `optimum-core::scene`, as §4 of the brief places glyph atlas logic in the core. A platform implements `GlyphSource` (metrics, lookup, rasterize, shading) and only uploads `Scene::take_uploads()` and draws `Scene::instances()`. Windows output is unchanged. A `COLOR` shading value is reserved for colour glyphs (emoji), which keep their colours under the block cursor.
+
+## ADR-029: macOS app, first version
+
+- **Date:** 2026-10-28
+- **Decision:** the first runnable macOS app covers window, text, input and the daily basics in one step, because it can only be checked by hand from a CI artifact.
+  - **Window:** one `NSWindow` with `Titled | Closable | Miniaturizable | Resizable | FullSizeContentView`, transparent hidden title, the three buttons hidden and the titlebar container hidden, so the content gets every click while the window keeps rounded corners, shadow, resize and native full screen. Automatic tabbing is off (`setAllowsAutomaticWindowTabbing(false)`, `tabbingMode = Disallowed`). The top padding is the drag strip (`performWindowDragWithEvent`, double click zooms). Closing the window quits the app.
+  - **Single instance:** `LSMultipleInstancesProhibited` in `Info.plist`, plus a `flock` on `~/Library/Application Support/Optimum/instance.lock`; a second process started directly activates the first through `NSRunningApplication` and exits. Bundle identifier `dev.optimum.Optimum`.
+  - **Menu:** only the app menu: Settings… (`Cmd+,`), Hide (`Cmd+H`), Quit (`Cmd+Q`).
+  - **Rendering:** a `CAMetalLayer` in sRGB, BGRA8, one instanced draw of the shared `Scene` (ADR-028) with an MSL shader compiled at start-up. CoreText implements `GlyphSource`: the configured family if installed, otherwise the bundled JetBrains Mono Nerd Font (registered from memory), otherwise Menlo; fallback through `CTFontCreateForString`; colour fonts (emoji) are rasterized in RGBA and drawn as `COLOR`. Glyphs are grayscale with font smoothing off; clarity tuning is M7.
+  - **Font size:** points are logical pixels, so `size = 12` is 12 pt at 1× and 24 device pixels on Retina.
+  - **Input:** `keyDown` runs `interpretKeyEvents` so dead keys and IME go through `NSTextInputClient`; the collected text, the physical key (from the ANSI key code), the modifiers and the unshifted character go to libghostty-vt's key encoder. Option produces characters (it is not Meta). Marked text is drawn as the preedit at the cursor.
+  - **Shortcuts** (macOS equivalents of ADR-026/027): `Cmd+C` copies the selection, `Cmd+V` pastes, `Cmd+A` selects all, `Shift+arrows` and `Cmd+Shift+←/→` extend a selection, `Esc` clears it, `Shift+PageUp/PageDown` and `Cmd+PageUp/PageDown` page, `Cmd+↑/↓` scroll a line, `Cmd+Home/End` jump, `Cmd+=`/`Cmd+-`/`Cmd+0` zoom, `Ctrl+Cmd+F` full screen, `Cmd+W` closes, `Cmd+M` minimizes, `Cmd+,` settings.
+  - **Mouse:** select-to-copy, double/triple click, Shift+click extends, right-click pastes, Shift overrides app mouse mode, wheel and trackpad scroll the scrollback or report to the app.
+  - **Settings:** `~/Library/Application Support/Optimum/config.toml`, opened with `open -t`, reloaded by polling its modification time every 400 ms.
+  - **Shell environment:** `LANG=en_US.UTF-8` is set when the app inherits no `LANG` (apps started from Finder get a bare environment).
+- **Packaging for testing:** CI builds `Optimum.app` (`installer/macos/bundle.sh`: `Info.plist`, `.icns` made with `sips` and `iconutil` from `assets/png/optimum-256.png`, ad-hoc `codesign`) and uploads `Optimum-macos.zip` as a workflow artifact. Tagged releases also attach `Optimum-<version>-macos-arm64.zip` and its checksum. The app is not signed with a Developer ID or notarized; after download run `xattr -dr com.apple.quarantine Optimum.app`. The new crates (objc2 family, block2, dispatch2, bitflags, libc) are listed in `THIRD_PARTY_NOTICES.md` under MIT.
+- **Not yet verified** on a real Mac: everything above. It compiles and passes clippy for `aarch64-apple-darwin`; the PTY and keyboard tests pass on Linux.

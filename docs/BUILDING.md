@@ -40,11 +40,22 @@ The first build compiles libghostty-vt with Zig and takes a few minutes; later b
 
 `cargo test` builds and runs the platform-agnostic crates as a Linux binary. Useful for quick checks; not the product.
 
+## macOS (from WSL)
+
+Apple Silicon only (ADR-028). WSL can check and lint the macOS code without an Apple SDK, because Zig cross-builds libghostty-vt:
+
+```sh
+rustup target add aarch64-apple-darwin
+cargo-zigbuild clippy --target aarch64-apple-darwin --workspace --all-targets -- -D warnings
+```
+
+Linking, tests and the app bundle need macOS, so they run in CI on `macos-15`. Every push to `main` uploads `Optimum-macos.zip` as a workflow artifact (ADR-029). On a Mac, unzip it, run `xattr -dr com.apple.quarantine Optimum.app` (the build is not notarized), then open it. On a Mac with Rust and Zig, `cargo build --release -p optimum` followed by `installer/macos/bundle.sh <version> target/release/optimum dist` produces the same bundle.
+
 ## Packaging (M8)
 
 A release is a zip, `optimum-<version>-windows-x64.zip`, holding one folder with `optimum.exe`, `conpty.dll`, `OpenConsole.exe`, `LICENSE`, `THIRD_PARTY_NOTICES.md` and `README.md`. A `.sha256` file goes next to it.
 
-- **CI:** pushing a tag `v<version>` runs `.github/workflows/release.yml` on `windows-latest`. It tests, builds the release exe, packages the zip and checksum, and attaches both to a GitHub Release.
+- **CI:** pushing a tag `v<version>` runs `.github/workflows/release.yml`. The `windows-latest` job tests, builds the release exe, packages the zip, the installer and checksums. The `macos-15` job tests, builds `Optimum.app`, zips it as `Optimum-<version>-macos-arm64.zip` with a checksum. Both attach their files to the same GitHub Release.
 - **Locally from WSL:** build with `cargo-zigbuild build --release --target x86_64-pc-windows-gnu -p optimum`, copy those six files into a folder, and zip it with PowerShell's `Compress-Archive`.
 - **Before tagging:** bump `version` in the root `Cargo.toml`, and regenerate the Rust crate list in `THIRD_PARTY_NOTICES.md` if dependencies changed (ADR-022).
 - **Installer:** `installer/optimum.iss` is an [Inno Setup](https://jrsoftware.org/isinfo.php) 6 script (ADR-025). After the release build, compile it on Windows:
