@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use optimum_core::{
     CellSize, ClickTiming, Config, GridSize, Key, Mods, MouseAction, MouseButton, MouseEvent,
-    MouseGeometry, Pointer, PtyEvent, Scroll, SelectionGeometry, Session, WindowConfig, cell_at,
-    grid_size, scale, wrap,
+    MouseGeometry, Pointer, PtyEvent, Scroll, SelectionGeometry, Session, View, WindowConfig,
+    cell_at, grid_size, scale, wrap,
 };
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{ScreenToClient, ValidateRect};
@@ -46,7 +46,7 @@ use windows::core::{PCWSTR, w};
 use crate::clipboard;
 use crate::ime::{self, Composition};
 use crate::keyboard::{self, Chars, Command, Stroke};
-use crate::renderer::{Renderer, View};
+use crate::renderer::Renderer;
 use crate::settings;
 use crate::window::{self, frame_thickness, hit_test, point_from_lparam, rect_size};
 use crate::{WinPty, WslStatus, instance};

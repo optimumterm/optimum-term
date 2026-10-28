@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::ManuallyDrop;
 
-use optimum_core::{Antialiasing, FontConfig, TextConfig};
+use optimum_core::{
+    Antialiasing, Bitmap, CLEARTYPE, CellMetrics, FontConfig, GRAYSCALE, GlyphSource, TextConfig,
+};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_METRICS, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE,
@@ -57,28 +59,10 @@ pub(crate) struct TextParams {
     pub cleartype_level: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CellMetrics {
-    pub width: u32,
-    pub height: u32,
-    pub baseline: i32,
-    pub underline_position: i32,
-    pub underline_thickness: u32,
-    pub strikethrough_position: i32,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct GlyphId {
     pub face: u16,
     pub index: u16,
-}
-
-pub(crate) struct Bitmap {
-    pub left: i32,
-    pub top: i32,
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -385,6 +369,31 @@ impl Fonts {
             let rgba = alpha.iter().flat_map(|&a| [a, a, a, a]).collect();
             Ok(Some(bitmap(bounds, rgba)))
         }
+    }
+}
+
+impl GlyphSource for Fonts {
+    type Id = GlyphId;
+
+    fn metrics(&self) -> CellMetrics {
+        self.metrics
+    }
+
+    fn shading(&self, _id: GlyphId) -> u32 {
+        match self.params.antialias {
+            Antialias::ClearType => CLEARTYPE,
+            Antialias::Grayscale => GRAYSCALE,
+        }
+    }
+
+    fn lookup(&mut self, text: &str, bold: bool, italic: bool) -> Option<GlyphId> {
+        Fonts::lookup(self, text, bold, italic)
+    }
+
+    fn rasterize(&mut self, id: GlyphId) -> Option<Bitmap> {
+        Fonts::rasterize(self, id, self.params.antialias)
+            .ok()
+            .flatten()
     }
 }
 

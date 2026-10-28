@@ -1,7 +1,10 @@
 use std::ffi::c_void;
 use std::mem::size_of;
 
-use optimum_core::{CellSize, Config, CursorStyle, Frame, Rgb, Row, Theme, codepoint_width, scale};
+use optimum_core::{
+    ATLAS_SIZE, CellSize, Config, Frame, GlyphSource, Instance, Layout, Rgb, Scene, Theme, View,
+    overlay_columns, scale,
+};
 use windows::Win32::Foundation::{HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCOMPILE_OPTIMIZATION_LEVEL3, D3DCompile};
 use windows::Win32::Graphics::Direct3D::{
@@ -38,24 +41,9 @@ use windows::Win32::Graphics::DirectComposition::{
     DCompositionCreateDevice, IDCompositionDevice, IDCompositionTarget, IDCompositionVisual,
 };
 
-use crate::atlas::{ATLAS_SIZE, Atlas, Slot};
-use crate::font::{Antialias, CellMetrics, Fonts, gamma_ratios};
+use crate::font::{Fonts, GlyphId, gamma_ratios};
 
 const SHADER: &str = include_str!("shader.hlsl");
-const SOLID: u32 = 0;
-const GRAYSCALE: u32 = 1;
-const CLEARTYPE: u32 = 2;
-const NO_COLUMN: u16 = u16::MAX;
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-struct Instance {
-    position: [i16; 2],
-    size: [u16; 2],
-    texcoord: [u16; 2],
-    color: u32,
-    shading: u32,
-}
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -67,24 +55,6 @@ struct Constants {
     grayscale_enhanced_contrast: f32,
     cleartype_level: f32,
     padding1: f32,
-}
-
-#[derive(Default)]
-struct RowCache {
-    backgrounds: Vec<Instance>,
-    glyphs: Vec<Instance>,
-    glyph_columns: Vec<u16>,
-}
-
-struct AtlasFull;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct View<'a> {
-    pub focused: bool,
-    pub preedit: &'a str,
-    pub overlay: &'a [String],
-    pub error: Option<&'a str>,
-    pub cursor_on: bool,
 }
 
 struct Pipeline {
@@ -109,7 +79,7 @@ pub(crate) struct Renderer {
     pipeline: Pipeline,
     instances: Option<ID3D11Buffer>,
     instance_capacity: usize,
-    atlas: Atlas,
+    scene: Scene<GlyphId>,
     fonts: Fonts,
     dpi: u32,
     padding: u32,
@@ -117,8 +87,6 @@ pub(crate) struct Renderer {
     text: optimum_core::TextConfig,
     width: u32,
     height: u32,
-    rows: Vec<RowCache>,
-    scratch: Vec<Instance>,
 }
 
 impl Renderer {
@@ -137,7 +105,7 @@ impl Renderer {
             pipeline,
             instances: None,
             instance_capacity: 0,
-            atlas: Atlas::new(),
+            scene: Scene::default(),
             fonts: Fonts::new(dpi, &config.font, &text_for(config))?,
             dpi,
             padding: config.window.padding,
@@ -145,8 +113,6 @@ impl Renderer {
             text: text_for(config),
             width: width.max(1),
             height: height.max(1),
-            rows: Vec::new(),
-            scratch: Vec::new(),
         };
         renderer.create_target()?;
         Ok(renderer)
@@ -165,8 +131,7 @@ impl Renderer {
         }
         self.fonts = Fonts::new(dpi, &self.font, &self.text)?;
         self.dpi = dpi;
-        self.atlas.clear();
-        self.rows.clear();
+        self.scene.reset();
         Ok(())
     }
 
@@ -178,9 +143,9 @@ impl Renderer {
             self.fonts = Fonts::new(self.dpi, &config.font, &text)?;
             self.font = config.font.clone();
             self.text = text;
-            self.atlas.clear();
+            self.scene.reset();
         }
-        self.rows.clear();
+        self.scene.invalidate();
         Ok(())
     }
 
@@ -192,7 +157,7 @@ impl Renderer {
     #[cfg(debug_assertions)]
     pub fn set_text_params(&mut self, params: crate::font::TextParams) {
         if params.antialias != self.fonts.params.antialias {
-            self.rows.clear();
+            self.scene.invalidate();
         }
         self.fonts.params = params;
     }
@@ -224,334 +189,26 @@ impl Renderer {
         theme: Theme,
         view: View<'_>,
     ) -> Result<()> {
-        self.scratch.clear();
-        let (foreground, background) = match frame {
-            Some(frame) => {
-                self.build(frame);
-                self.assemble(frame, view);
-                (frame.foreground, frame.background)
-            }
-            None => (theme.foreground, theme.background),
+        let layout = Layout {
+            width: self.width,
+            height: self.height,
+            padding: scale(self.padding, self.dpi) as i32,
+            border: scale(1, self.dpi),
+            opacity: self.opacity,
         };
-        if !view.overlay.is_empty() {
-            self.overlay(view.overlay, foreground, background);
-        }
-        if let Some(error) = view.error {
-            self.error_line(error, foreground, background.mix(theme.palette[1], 0.45));
-        }
+        let background = self
+            .scene
+            .compose(&mut self.fonts, layout, frame, theme, view);
         self.upload_glyphs();
         self.draw(background)
     }
 
     pub fn overlay_columns(&self) -> usize {
-        (self.width / self.fonts.metrics.width.max(1)).saturating_sub(8) as usize
-    }
-
-    fn error_line(&mut self, text: &str, foreground: Rgb, background: Rgb) {
-        let m = self.fonts.metrics;
-        let top = self.height as i32 - m.height as i32;
-        self.scratch
-            .push(solid(0, top, self.width, m.height, background));
-        let mut x = m.width as i32;
-        for c in text.chars() {
-            let span = u32::from(codepoint_width(c));
-            if span == 0 {
-                continue;
-            }
-            if x + (span * m.width) as i32 > self.width as i32 {
-                break;
-            }
-            let mut buf = [0u8; 4];
-            if let Ok(Some(glyph)) =
-                self.glyph(c.encode_utf8(&mut buf), false, false, x, top, foreground)
-            {
-                self.scratch.push(glyph);
-            }
-            x += (span * m.width) as i32;
-        }
-    }
-
-    fn overlay(&mut self, lines: &[String], foreground: Rgb, background: Rgb) {
-        let m = self.fonts.metrics;
-        let cells =
-            |line: &str| -> u32 { line.chars().map(|c| u32::from(codepoint_width(c))).sum() };
-        let widest = lines.iter().map(|l| cells(l)).max().unwrap_or(0);
-        let width = (widest + 4) * m.width;
-        let height = (lines.len() as u32 + 2) * m.height;
-        let left = ((self.width as i32 - width as i32) / 2).max(0);
-        let top = ((self.height as i32 - height as i32) / 2).max(0);
-        let border = scale(1, self.dpi).max(1);
-        self.scratch.push(solid(
-            left,
-            top,
-            width,
-            height,
-            background.mix(foreground, 0.35),
-        ));
-        self.scratch.push(solid(
-            left + border as i32,
-            top + border as i32,
-            width.saturating_sub(2 * border),
-            height.saturating_sub(2 * border),
-            background.mix(foreground, 0.08),
-        ));
-        for (row, line) in lines.iter().enumerate() {
-            let mut x = left + ((2 * m.width + (widest - cells(line)) / 2 * m.width) as i32);
-            let y = top + (row as i32 + 1) * m.height as i32;
-            for c in line.chars() {
-                let span = u32::from(codepoint_width(c));
-                if span == 0 {
-                    continue;
-                }
-                let mut buf = [0u8; 4];
-                if let Ok(Some(glyph)) =
-                    self.glyph(c.encode_utf8(&mut buf), false, false, x, y, foreground)
-                {
-                    self.scratch.push(glyph);
-                }
-                x += (span * m.width) as i32;
-            }
-        }
-    }
-
-    fn build(&mut self, frame: &mut Frame) {
-        if self.rows.len() != frame.rows.len() {
-            self.rows.resize_with(frame.rows.len(), RowCache::default);
-            frame.rows.iter_mut().for_each(|r| r.dirty = true);
-        }
-        for _ in 0..2 {
-            let mut full = false;
-            for (y, row) in frame.rows.iter_mut().enumerate() {
-                if !row.dirty {
-                    continue;
-                }
-                let mut cache = std::mem::take(&mut self.rows[y]);
-                let result = self.build_row(&mut cache, y, row, frame.background);
-                self.rows[y] = cache;
-                if result.is_err() {
-                    full = true;
-                    break;
-                }
-                row.dirty = false;
-            }
-            if !full {
-                return;
-            }
-            self.atlas.clear();
-            frame.rows.iter_mut().for_each(|r| r.dirty = true);
-        }
-    }
-
-    fn build_row(
-        &mut self,
-        cache: &mut RowCache,
-        y: usize,
-        row: &Row,
-        default_background: Rgb,
-    ) -> std::result::Result<(), AtlasFull> {
-        cache.backgrounds.clear();
-        cache.glyphs.clear();
-        cache.glyph_columns.clear();
-
-        let m = self.fonts.metrics;
-        let padding = scale(self.padding, self.dpi) as i32;
-        let top = padding + y as i32 * m.height as i32;
-
-        for (column, cell) in row.cells.iter().enumerate() {
-            let left = padding + column as i32 * m.width as i32;
-            let span = m.width * u32::from(cell.width.max(1));
-
-            if let Some(bg) = cell.background
-                && bg != default_background
-                && cell.width > 0
-            {
-                let color = pack_alpha(bg, self.opacity);
-                match cache.backgrounds.last_mut() {
-                    Some(last)
-                        if last.color == color
-                            && i32::from(last.position[0]) + i32::from(last.size[0]) == left =>
-                    {
-                        last.size[0] += span as u16;
-                    }
-                    _ => cache.backgrounds.push(Instance {
-                        color,
-                        ..solid(left, top, span, m.height, bg)
-                    }),
-                }
-            }
-
-            if cell.width == 0 {
-                continue;
-            }
-            if cell.underline {
-                cache.glyphs.push(solid(
-                    left,
-                    top + m.underline_position,
-                    span,
-                    m.underline_thickness,
-                    cell.foreground,
-                ));
-                cache.glyph_columns.push(NO_COLUMN);
-            }
-            if cell.strikethrough {
-                cache.glyphs.push(solid(
-                    left,
-                    top + m.strikethrough_position,
-                    span,
-                    m.underline_thickness,
-                    cell.foreground,
-                ));
-                cache.glyph_columns.push(NO_COLUMN);
-            }
-            if cell.text.is_empty() || cell.text == " " {
-                continue;
-            }
-            if let Some(glyph) = self.glyph(
-                &cell.text,
-                cell.bold,
-                cell.italic,
-                left,
-                top,
-                cell.foreground,
-            )? {
-                cache.glyphs.push(glyph);
-                cache.glyph_columns.push(column as u16);
-            }
-        }
-        Ok(())
-    }
-
-    fn glyph(
-        &mut self,
-        text: &str,
-        bold: bool,
-        italic: bool,
-        left: i32,
-        top: i32,
-        color: Rgb,
-    ) -> std::result::Result<Option<Instance>, AtlasFull> {
-        let antialias = self.fonts.params.antialias;
-        let Some(id) = self.fonts.lookup(text, bold, italic) else {
-            return Ok(None);
-        };
-        let entry = match self.atlas.get(id, antialias) {
-            Some(entry) => entry,
-            None => {
-                let bitmap = self.fonts.rasterize(id, antialias).ok().flatten();
-                match self.atlas.insert(id, antialias, bitmap) {
-                    Slot::Cached(entry) => entry,
-                    Slot::Full => return Err(AtlasFull),
-                }
-            }
-        };
-        let Some(g) = entry else {
-            return Ok(None);
-        };
-        let shading = if antialias == Antialias::ClearType {
-            CLEARTYPE
-        } else {
-            GRAYSCALE
-        };
-        Ok(Some(Instance {
-            position: [
-                (left + g.left) as i16,
-                (top + self.fonts.metrics.baseline + g.top) as i16,
-            ],
-            size: [g.width, g.height],
-            texcoord: [g.x, g.y],
-            color: pack(color),
-            shading,
-        }))
-    }
-
-    fn assemble(&mut self, frame: &Frame, view: View<'_>) {
-        for row in &self.rows {
-            self.scratch.extend_from_slice(&row.backgrounds);
-        }
-
-        let m = self.fonts.metrics;
-        let padding = scale(self.padding, self.dpi) as i32;
-        let composing = !view.preedit.is_empty();
-        let cursor = frame
-            .cursor
-            .filter(|c| !composing && (view.cursor_on || !c.blinking || !view.focused))
-            .map(|mut cursor| {
-                if !view.focused && cursor.style == CursorStyle::Block {
-                    cursor.style = CursorStyle::BlockHollow;
-                }
-                cursor
-            });
-        let block_cursor = cursor.filter(|c| c.style == CursorStyle::Block);
-        if let Some(cursor) = cursor {
-            self.scratch.extend(cursor_quads(
-                cursor_rect(cursor, m, padding),
-                cursor.style,
-                m,
-                cursor.color,
-            ));
-        }
-
-        for (y, row) in self.rows.iter().enumerate() {
-            for (glyph, &column) in row.glyphs.iter().zip(&row.glyph_columns) {
-                let mut glyph = *glyph;
-                if let Some(cursor) = block_cursor
-                    && cursor.y as usize == y
-                    && cursor.x == column
-                {
-                    glyph.color = pack(frame.background);
-                }
-                self.scratch.push(glyph);
-            }
-        }
-
-        if let (true, Some(cursor)) = (composing, frame.cursor) {
-            self.preedit(view.preedit, cursor, frame);
-        }
-    }
-
-    fn preedit(&mut self, text: &str, cursor: optimum_core::FrameCursor, frame: &Frame) {
-        let m = self.fonts.metrics;
-        let padding = scale(self.padding, self.dpi) as i32;
-        let start = padding + i32::from(cursor.x) * m.width as i32;
-        let top = padding + i32::from(cursor.y) * m.height as i32;
-        let mut left = start;
-        let mut glyphs = Vec::new();
-        for c in text.chars() {
-            let width = u32::from(codepoint_width(c));
-            if width == 0 {
-                continue;
-            }
-            let mut buf = [0u8; 4];
-            if let Ok(Some(glyph)) = self.glyph(
-                c.encode_utf8(&mut buf),
-                false,
-                false,
-                left,
-                top,
-                frame.foreground,
-            ) {
-                glyphs.push(glyph);
-            }
-            left += (m.width * width) as i32;
-        }
-        let span = (left - start) as u32;
-        let thickness = m.underline_thickness.max(1);
-        self.scratch
-            .push(solid(start, top, span, m.height, frame.background));
-        self.scratch.extend(glyphs);
-        self.scratch.push(solid(
-            start,
-            top + m.underline_position,
-            span,
-            thickness,
-            frame.foreground,
-        ));
-        self.scratch
-            .push(solid(left, top, thickness, m.height, cursor.color));
+        overlay_columns(self.width, self.fonts.metrics())
     }
 
     fn upload_glyphs(&mut self) {
-        for upload in self.atlas.take_uploads() {
+        for upload in self.scene.take_uploads() {
             let b = &upload.bitmap;
             let region = D3D11_BOX {
                 left: upload.x,
@@ -579,7 +236,7 @@ impl Renderer {
         let Some(target) = self.target.clone() else {
             return Ok(());
         };
-        let count = self.scratch.len();
+        let count = self.scene.instances().len();
         if count > 0 {
             self.ensure_instance_capacity(count)?;
         }
@@ -609,7 +266,7 @@ impl Renderer {
                 self.context
                     .Map(instances, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut mapped))?;
                 std::ptr::copy_nonoverlapping(
-                    self.scratch.as_ptr(),
+                    self.scene.instances().as_ptr(),
                     mapped.pData.cast::<Instance>(),
                     count,
                 );
@@ -693,64 +350,6 @@ impl Renderer {
         self.target = target;
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Rect {
-    left: i32,
-    top: i32,
-    width: u32,
-    height: u32,
-}
-
-fn cursor_rect(cursor: optimum_core::FrameCursor, m: CellMetrics, padding: i32) -> Rect {
-    Rect {
-        left: padding + i32::from(cursor.x) * m.width as i32,
-        top: padding + i32::from(cursor.y) * m.height as i32,
-        width: m.width * if cursor.wide { 2 } else { 1 },
-        height: m.height,
-    }
-}
-
-fn cursor_quads(r: Rect, style: CursorStyle, m: CellMetrics, color: Rgb) -> Vec<Instance> {
-    let t = m.underline_thickness.max(1);
-    match style {
-        CursorStyle::Block => vec![solid(r.left, r.top, r.width, r.height, color)],
-        CursorStyle::Bar => vec![solid(r.left, r.top, t, r.height, color)],
-        CursorStyle::Underline => vec![solid(
-            r.left,
-            r.top + m.underline_position,
-            r.width,
-            t,
-            color,
-        )],
-        CursorStyle::BlockHollow => vec![
-            solid(r.left, r.top, r.width, 1, color),
-            solid(r.left, r.top + r.height as i32 - 1, r.width, 1, color),
-            solid(r.left, r.top, 1, r.height, color),
-            solid(r.left + r.width as i32 - 1, r.top, 1, r.height, color),
-        ],
-    }
-}
-
-fn solid(left: i32, top: i32, width: u32, height: u32, color: Rgb) -> Instance {
-    Instance {
-        position: [left as i16, top as i16],
-        size: [width as u16, height as u16],
-        texcoord: [0, 0],
-        color: pack(color),
-        shading: SOLID,
-    }
-}
-
-fn pack(c: Rgb) -> u32 {
-    pack_alpha(c, 1.0)
-}
-
-fn pack_alpha(c: Rgb, alpha: f32) -> u32 {
-    let a = alpha.clamp(0.0, 1.0);
-    let channel = |v: u8| (f32::from(v) * a).round() as u32;
-    channel(c.r) | channel(c.g) << 8 | channel(c.b) << 16 | ((a * 255.0).round() as u32) << 24
 }
 
 fn create_device(driver: D3D_DRIVER_TYPE) -> Result<(ID3D11Device, ID3D11DeviceContext)> {
@@ -999,15 +598,6 @@ fn create_pipeline(device: &ID3D11Device) -> Result<Pipeline> {
 mod tests {
     use super::*;
 
-    const M: CellMetrics = CellMetrics {
-        width: 10,
-        height: 20,
-        baseline: 15,
-        underline_position: 17,
-        underline_thickness: 2,
-        strikethrough_position: 10,
-    };
-
     #[test]
     fn instance_layout_matches_input_layout() {
         assert_eq!(size_of::<Instance>(), 20);
@@ -1018,29 +608,5 @@ mod tests {
     fn shaders_compile() {
         assert!(compile(s!("vs_main"), s!("vs_4_0")).is_ok());
         assert!(compile(s!("ps_main"), s!("ps_4_0")).is_ok());
-    }
-
-    #[test]
-    fn colors_pack_as_rgba8() {
-        assert_eq!(pack(Rgb::new(1, 2, 3)), 0xff03_0201);
-        assert_eq!(pack_alpha(Rgb::new(200, 100, 0), 0.5), 0x8000_3264);
-    }
-
-    #[test]
-    fn cursor_shapes_follow_style() {
-        let r = Rect {
-            left: 12,
-            top: 52,
-            width: 20,
-            height: 20,
-        };
-        let c = Rgb::new(255, 255, 255);
-        let block = cursor_quads(r, CursorStyle::Block, M, c);
-        assert_eq!(block[0].size, [20, 20]);
-        let bar = cursor_quads(r, CursorStyle::Bar, M, c);
-        assert_eq!(bar[0].size, [2, 20]);
-        let underline = cursor_quads(r, CursorStyle::Underline, M, c);
-        assert_eq!(underline[0].position, [12, 69]);
-        assert_eq!(cursor_quads(r, CursorStyle::BlockHollow, M, c).len(), 4);
     }
 }

@@ -1,7 +1,6 @@
 #![cfg(windows)]
 
 mod app;
-mod atlas;
 mod clipboard;
 mod conpty;
 mod font;
