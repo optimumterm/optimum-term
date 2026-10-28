@@ -29,6 +29,37 @@ pub struct ClickTiming {
     pub distance: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Adjust {
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    LineStart,
+    LineEnd,
+}
+
+impl Adjust {
+    fn raw(self) -> sys::GhosttySelectionAdjust {
+        match self {
+            Adjust::Left => sys::GHOSTTY_SELECTION_ADJUST_LEFT,
+            Adjust::Right => sys::GHOSTTY_SELECTION_ADJUST_RIGHT,
+            Adjust::Up => sys::GHOSTTY_SELECTION_ADJUST_UP,
+            Adjust::Down => sys::GHOSTTY_SELECTION_ADJUST_DOWN,
+            Adjust::Home => sys::GHOSTTY_SELECTION_ADJUST_HOME,
+            Adjust::End => sys::GHOSTTY_SELECTION_ADJUST_END,
+            Adjust::PageUp => sys::GHOSTTY_SELECTION_ADJUST_PAGE_UP,
+            Adjust::PageDown => sys::GHOSTTY_SELECTION_ADJUST_PAGE_DOWN,
+            Adjust::LineStart => sys::GHOSTTY_SELECTION_ADJUST_BEGINNING_OF_LINE,
+            Adjust::LineEnd => sys::GHOSTTY_SELECTION_ADJUST_END_OF_LINE,
+        }
+    }
+}
+
 pub(crate) struct SelectionGesture {
     raw: NonNull<sys::GhosttySelectionGestureImpl>,
     press: NonNull<sys::GhosttySelectionGestureEventImpl>,
@@ -239,6 +270,51 @@ impl Terminal {
                 value,
             )
         })
+    }
+
+    pub fn select_all(&mut self) -> Result<(), Error> {
+        let mut selection = sys::GhosttySelection {
+            size: size_of::<sys::GhosttySelection>(),
+            ..Default::default()
+        };
+        // SAFETY: `self.raw` is live; `selection` is a sized out-struct.
+        Error::check(unsafe {
+            sys::ghostty_terminal_select_all(self.raw.as_ptr(), &mut selection)
+        })?;
+        self.set_selection(Some(&selection))
+    }
+
+    pub fn extend_selection(&mut self, pointer: Pointer) -> Result<bool, Error> {
+        let Some(mut selection) = self.current_selection()? else {
+            return Ok(false);
+        };
+        selection.end = self.viewport_ref(pointer.col, pointer.row)?;
+        self.set_selection(Some(&selection))?;
+        Ok(true)
+    }
+
+    fn current_selection(&self) -> Result<Option<sys::GhosttySelection>, Error> {
+        let mut selection = sys::GhosttySelection {
+            size: size_of::<sys::GhosttySelection>(),
+            ..Default::default()
+        };
+        match self.get(sys::GHOSTTY_TERMINAL_DATA_SELECTION, &mut selection) {
+            Ok(()) => Ok(Some(selection)),
+            Err(Error::NoValue) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn adjust_selection(&mut self, adjust: Adjust) -> Result<bool, Error> {
+        let Some(mut selection) = self.current_selection()? else {
+            return Ok(false);
+        };
+        // SAFETY: `self.raw` is live; `selection` was just read from it and no mutating call happened since.
+        Error::check(unsafe {
+            sys::ghostty_terminal_selection_adjust(self.raw.as_ptr(), &mut selection, adjust.raw())
+        })?;
+        self.set_selection(Some(&selection))?;
+        Ok(true)
     }
 
     pub fn clear_selection(&mut self) {

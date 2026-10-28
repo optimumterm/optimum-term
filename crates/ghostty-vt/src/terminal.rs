@@ -195,7 +195,7 @@ impl Terminal {
         )
     }
 
-    fn get<T>(&self, data: sys::GhosttyTerminalData, out: &mut T) -> Result<(), Error> {
+    pub(crate) fn get<T>(&self, data: sys::GhosttyTerminalData, out: &mut T) -> Result<(), Error> {
         // SAFETY: `self.raw` is live; `out` points to a value of the type `data` writes.
         Error::check(unsafe {
             sys::ghostty_terminal_get(self.raw.as_ptr(), data, (out as *mut T).cast::<c_void>())

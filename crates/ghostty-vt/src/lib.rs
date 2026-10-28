@@ -13,5 +13,5 @@ pub use render::{
     CellStyle, Cells, Colors, Cursor, CursorStyle, Dirty, DirtyRow, DirtyRows, RenderState, Rgb,
     Wide,
 };
-pub use selection::{ClickTiming, Pointer, SelectionGeometry};
+pub use selection::{Adjust, ClickTiming, Pointer, SelectionGeometry};
 pub use terminal::{Mode, Scroll, Terminal, encode_paste};

@@ -1,5 +1,6 @@
 use ghostty_vt::{
-    ClickTiming, Mode, Pointer, RenderState, Scroll, SelectionGeometry, Terminal, encode_paste,
+    Adjust, ClickTiming, Mode, Pointer, RenderState, Scroll, SelectionGeometry, Terminal,
+    encode_paste,
 };
 
 const TIMING: ClickTiming = ClickTiming {
@@ -54,6 +55,52 @@ fn double_click_selects_word_and_triple_click_selects_line() {
     term.select_press(at(7, 0), timing).unwrap();
     term.select_release(at(7, 0)).unwrap();
     assert_eq!(term.selection_text().as_deref(), Some("hello world"));
+}
+
+#[test]
+fn select_all_takes_every_line() {
+    let mut term = Terminal::new(20, 4).unwrap();
+    term.write(b"hello world\r\nsecond line");
+    term.select_all().unwrap();
+    assert_eq!(
+        term.selection_text().as_deref(),
+        Some("hello world\nsecond line")
+    );
+}
+
+#[test]
+fn keyboard_adjusts_an_existing_selection_only() {
+    let mut term = Terminal::new(20, 4).unwrap();
+    term.write(b"hello world\r\nsecond line");
+    assert!(!term.adjust_selection(Adjust::Right).unwrap());
+    let mut timing = TIMING;
+    for _ in 0..2 {
+        term.select_press(at(0, 0), timing).unwrap();
+        term.select_release(at(0, 0)).unwrap();
+        timing.time_ns += 100_000_000;
+    }
+    assert_eq!(term.selection_text().as_deref(), Some("hello"));
+    assert!(term.adjust_selection(Adjust::LineEnd).unwrap());
+    assert_eq!(term.selection_text().as_deref(), Some("hello world"));
+}
+
+#[test]
+fn shift_click_extends_an_existing_selection() {
+    let mut term = Terminal::new(20, 4).unwrap();
+    term.write(b"hello world\r\nsecond line");
+    assert!(!term.extend_selection(at(3, 1)).unwrap());
+    term.select_press(at(0, 0), TIMING).unwrap();
+    let past_middle = Pointer {
+        x: 47.0,
+        ..at(4, 0)
+    };
+    term.select_drag(past_middle, GEOMETRY).unwrap();
+    term.select_release(at(4, 0)).unwrap();
+    assert!(term.extend_selection(at(5, 1)).unwrap());
+    assert_eq!(
+        term.selection_text().as_deref(),
+        Some("hello world\nsecond")
+    );
 }
 
 #[test]
