@@ -359,3 +359,26 @@ ADR-style log. Each entry: decision, date, why.
 - **Tooling:** Inno Setup 6.7.3, sha256 `9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732` for `innosetup-6.7.3.exe`. CI installs it with Chocolatey; locally it runs as a portable install outside the repo. Inno Setup's licence allows redistributing installers built with it.
 - **`optimum-icon`** goes back to embedding only the icon.
 - **Verified:** the script compiles with ISCC 6.7.3 into a 5 MB installer. The wizard is checked by hand on Windows.
+
+## ADR-026: Standard system shortcuts
+
+- **Date:** 2026-10-28
+- **Decision:** the "one shortcut" rule covers features of the terminal itself: there are none besides `Ctrl+,`. Standard Windows text shortcuts are a different thing and all of them work, the same way as in Windows Terminal:
+  - **Copy:** `Ctrl+C` copies and clears the selection when there is one; without a selection it goes to the shell as the interrupt. `Ctrl+Shift+C` and `Ctrl+Insert` always copy.
+  - **Paste:** `Ctrl+V`, `Ctrl+Shift+V`, `Shift+Insert` (and right-click, ADR-017).
+  - **Select all:** `Ctrl+Shift+A` (libghostty-vt `ghostty_terminal_select_all`). `Ctrl+A` stays with the shell (start of line, tmux prefix).
+  - **Selection by keyboard:** with a selection active, `Shift+arrows` and `Shift+Home/End` extend it (`ghostty_terminal_selection_adjust`); without one, those keys go to the app. `Esc` clears an active selection and is not sent. Any input sent to the shell (keys, text, paste) also clears the selection.
+  - **Scrollback:** `Shift+PageUp/PageDown` by a screen, `Ctrl+Shift+Up/Down` by a line, `Ctrl+Shift+Home/End` to top or bottom. On the alternate screen these keys go to the app.
+  - **Window menu:** `Alt+Space` posts `WM_SYSCOMMAND/SC_KEYMENU`, which opens the system menu (move, size, minimise, close).
+- **Matching:** letters are matched by virtual key, so they work on any layout (Cyrillic included); modifiers must match exactly, so `Ctrl+Alt+C` (AltGr) is untouched. A swallowed key's release is swallowed too, so apps with kitty release reporting never see a lone release.
+- **Trade-off:** `Ctrl+V` no longer reaches the shell (`quoted-insert` in bash, block visual mode in vim; vim users can use `Ctrl+Q`). This matches Windows Terminal's defaults.
+- **Also added** (same day): font zoom and full screen, see ADR-027.
+
+## ADR-027: Font zoom, full screen, Shift+click
+
+- **Date:** 2026-10-28
+- **Decision:** three more everyday shortcuts, as in Ghostty and Windows Terminal. This drops "font zoom shortcuts" from the non-goals.
+  - **Font size:** `Ctrl+=` (also `Ctrl+Shift+=` and numpad `+`), `Ctrl+-` (numpad `-`), `Ctrl+0` (numpad `0`) resets; `Ctrl`+wheel zooms by one point per notch, even when an app grabs the mouse. Steps are 1 pt, clamped to 4–96 pt. The zoom is an offset on top of `[font] size`, kept across config reloads and DPI changes, and never written to `config.toml`.
+  - **Full screen:** `F11` or `Alt+Enter` toggles. The window drops `WS_OVERLAPPEDWINDOW` for `WS_POPUP`, covers its monitor (`rcMonitor`), loses rounded corners, and hit-tests as client only (no drag strip or resize edges). Leaving restores the style, corners and the saved `WINDOWPLACEMENT`, including the maximized state.
+  - **Shift+click** with an active selection moves its end to the clicked cell and keeps the start; dragging with Shift held keeps extending; the result is copied on release. Without a selection, Shift+click starts a normal selection (the Shift mouse override from ADR-017 still applies).
+- **Rejected:** a double `Esc` to close the window. Programs use `Esc Esc` all the time (Claude Code, vim, fzf, zsh vi-mode), and closing has no confirmation (ADR-021).

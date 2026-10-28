@@ -10,7 +10,7 @@ The name comes from the Wooting Optimum keyboard.
 
 - Opens your default WSL distro in your home directory. That's the only thing it runs.
 - One window per user. Starting it again brings the existing window to the front.
-- No shortcuts except `Ctrl+,`, which opens the settings. Every other key goes to the shell.
+- Standard Windows shortcuts work: copy, paste, select all, Shift+PageUp and so on. The terminal adds only one of its own, `Ctrl+,` for settings. Everything else goes to the shell.
 - Settings only cover how it looks: font, colours, cursor, padding, opacity.
 - No tabs or splits. Use tmux or zellij for that.
 - No network access, telemetry, accounts or auto-update.
@@ -23,8 +23,8 @@ In the era of multiplexers, tabs have become a vestige. If you're a multiplexer 
 **Why "Optimum"?**
 It's inspired by the Wooting Optimum keyboard: maximum minimalism and elegance.
 
-**Why are there no shortcuts?**
-Every key belongs to your shell and your multiplexer. Optimum takes exactly one, `Ctrl+,`, to open the settings.
+**Why so few shortcuts?**
+Optimum has no features of its own that need keys. It supports the usual shortcuts (copy, paste, select all, scrolling, font size, full screen) and adds only `Ctrl+,` for the settings. Every other key belongs to your shell and your multiplexer.
 
 ## Requirements
 
@@ -46,13 +46,22 @@ The builds aren't code-signed yet, so SmartScreen may warn you. Click "More info
 
 | Action | How |
 |---|---|
-| Copy | Select text with the mouse. It's copied when you release the button. Double-click selects a word, triple-click a line. |
-| Paste | Right-click |
+| Copy | `Ctrl+C` when text is selected (without a selection it's the usual interrupt), `Ctrl+Shift+C`, `Ctrl+Insert`. Selecting with the mouse also copies. |
+| Paste | `Ctrl+V`, `Ctrl+Shift+V`, `Shift+Insert`, or right-click |
+| Select all | `Ctrl+Shift+A` (`Ctrl+A` stays with the shell) |
+| Select | Drag with the mouse. Double-click selects a word, triple-click a line. Shift+click extends the selection. |
+| Change the selection | `Shift+←/→/↑/↓`, `Shift+Home/End` |
+| Clear the selection | `Esc`, or just keep typing |
 | Select in tmux/vim with mouse mode on | Hold Shift |
-| Scroll back | Mouse wheel |
+| Scroll back | Mouse wheel, `Shift+PageUp/PageDown`, `Ctrl+Shift+↑/↓`, `Ctrl+Shift+Home/End` |
+| Font size | `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, or `Ctrl`+mouse wheel. It isn't saved; set `size` in the settings for that. |
+| Full screen | `F11` or `Alt+Enter` |
+| Window menu | `Alt+Space` |
 | Move the window | Drag the top edge |
 | Close | `Alt+F4`, the taskbar, or `exit` in the shell |
 | Settings | `Ctrl+,` |
+
+Inside full-screen apps (vim, less, htop) the scrolling keys go to the app.
 
 Programs inside WSL can copy to the Windows clipboard with OSC 52, so copying in tmux or nvim works. They can't read the clipboard.
 

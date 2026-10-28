@@ -1,6 +1,6 @@
 # Architecture
 
-Current state: **M8 (release packaging)**: README, zip packaging, the Inno Setup installer `installer/optimum.iss` (ADR-025) and a tag-triggered release workflow (ADR-022). M7 clarity is signed off with system defaults (ADR-023). `optimum.exe` renders the shell with DirectWrite + D3D11, sends it keyboard, IME, mouse and focus input, and has select-to-copy, right-click paste, OSC 52, wheel scrollback, synchronized output and the WSL-missing panel. Closing the window closes immediately (ADR-021). `config.toml` (M6) configures fonts, text rendering, colours, cursor, padding and opacity, with hot reload.
+Current state: **M8 (release packaging)**: README, zip packaging, the Inno Setup installer `installer/optimum.iss` (ADR-025) and a tag-triggered release workflow (ADR-022). M7 clarity is signed off with system defaults (ADR-023). `optimum.exe` renders the shell with DirectWrite + D3D11, sends it keyboard, IME, mouse and focus input, and has select-to-copy, right-click paste, OSC 52, wheel scrollback, synchronized output and the WSL-missing panel. Closing the window closes immediately (ADR-021). Standard Windows shortcuts for copy, paste, select all, keyboard selection and scrollback work (ADR-026), plus font zoom, full screen and Shift+click selection (ADR-027). `config.toml` (M6) configures fonts, text rendering, colours, cursor, padding and opacity, with hot reload.
 
 ## Crates
 
