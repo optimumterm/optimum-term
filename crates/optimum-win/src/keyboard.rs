@@ -1,9 +1,11 @@
-use optimum_core::{Key, KeyAction, KeyEvent, Mods};
+use optimum_core::{Adjust, Key, KeyAction, KeyEvent, Mods};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL,
-    VK_CONTROL, VK_DECIMAL, VK_LCONTROL, VK_LMENU, VK_LWIN, VK_MENU, VK_NUMLOCK, VK_NUMPAD0,
-    VK_NUMPAD9, VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT,
+    GetKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VIRTUAL_KEY, VK_ADD, VK_CAPITAL,
+    VK_CONTROL, VK_DECIMAL, VK_DOWN, VK_END, VK_ESCAPE, VK_F11, VK_HOME, VK_INSERT, VK_LCONTROL,
+    VK_LEFT, VK_LMENU, VK_LWIN, VK_MENU, VK_NEXT, VK_NUMLOCK, VK_NUMPAD0, VK_NUMPAD9, VK_OEM_MINUS,
+    VK_OEM_PLUS, VK_PRIOR, VK_RCONTROL, VK_RETURN, VK_RIGHT, VK_RMENU, VK_RSHIFT, VK_RWIN,
+    VK_SHIFT, VK_SPACE, VK_SUBTRACT, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     MSG, PM_REMOVE, PeekMessageW, WM_CHAR, WM_DEADCHAR, WM_SYSCHAR, WM_SYSDEADCHAR,
@@ -184,6 +186,69 @@ pub(crate) fn is_settings(key: Key, mods: Mods) -> bool {
     key == Key::Comma && mods.binding() == Mods::CTRL
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Command {
+    Copy,
+    CopyOrInterrupt,
+    Paste,
+    SelectAll,
+    Escape,
+    Extend(Adjust),
+    ScrollPage(isize),
+    ScrollLine(isize),
+    ScrollTop,
+    ScrollBottom,
+    SystemMenu,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+    Fullscreen,
+}
+
+pub(crate) fn command(vk: u16, mods: Mods) -> Option<Command> {
+    const KEY_A: u16 = b'A' as u16;
+    const KEY_C: u16 = b'C' as u16;
+    const KEY_V: u16 = b'V' as u16;
+    const KEY_0: u16 = b'0' as u16;
+    let ctrl = Mods::CTRL;
+    let shift = Mods::SHIFT;
+    let ctrl_shift = Mods::CTRL | Mods::SHIFT;
+    let mods = mods.binding();
+    let command = match vk {
+        KEY_C if mods == ctrl => Command::CopyOrInterrupt,
+        KEY_C if mods == ctrl_shift => Command::Copy,
+        KEY_V if mods == ctrl || mods == ctrl_shift => Command::Paste,
+        KEY_A if mods == ctrl_shift => Command::SelectAll,
+        _ if vk == VK_INSERT.0 && mods == ctrl => Command::Copy,
+        _ if vk == VK_INSERT.0 && mods == shift => Command::Paste,
+        _ if vk == VK_ESCAPE.0 && mods == Mods::default() => Command::Escape,
+        _ if vk == VK_SPACE.0 && mods == Mods::ALT => Command::SystemMenu,
+        _ if vk == VK_OEM_PLUS.0 && (mods == ctrl || mods == ctrl_shift) => Command::ZoomIn,
+        _ if vk == VK_ADD.0 && mods == ctrl => Command::ZoomIn,
+        _ if (vk == VK_OEM_MINUS.0 || vk == VK_SUBTRACT.0) && mods == ctrl => Command::ZoomOut,
+        _ if (vk == KEY_0 || vk == VK_NUMPAD0.0) && mods == ctrl => Command::ZoomReset,
+        _ if vk == VK_F11.0 && mods == Mods::default() => Command::Fullscreen,
+        _ if vk == VK_RETURN.0 && mods == Mods::ALT => Command::Fullscreen,
+        _ if vk == VK_PRIOR.0 && mods == shift => Command::ScrollPage(-1),
+        _ if vk == VK_NEXT.0 && mods == shift => Command::ScrollPage(1),
+        _ if vk == VK_UP.0 && mods == ctrl_shift => Command::ScrollLine(-1),
+        _ if vk == VK_DOWN.0 && mods == ctrl_shift => Command::ScrollLine(1),
+        _ if vk == VK_HOME.0 && mods == ctrl_shift => Command::ScrollTop,
+        _ if vk == VK_END.0 && mods == ctrl_shift => Command::ScrollBottom,
+        _ if mods == shift => Command::Extend(match vk {
+            _ if vk == VK_LEFT.0 => Adjust::Left,
+            _ if vk == VK_RIGHT.0 => Adjust::Right,
+            _ if vk == VK_UP.0 => Adjust::Up,
+            _ if vk == VK_DOWN.0 => Adjust::Down,
+            _ if vk == VK_HOME.0 => Adjust::LineStart,
+            _ if vk == VK_END.0 => Adjust::LineEnd,
+            _ => return None,
+        }),
+        _ => return None,
+    };
+    Some(command)
+}
+
 pub(crate) fn key_from_scancode(scancode: u32, extended: bool, vk: u16) -> Key {
     let numpad_digit = (VK_NUMPAD0.0..=VK_NUMPAD9.0).contains(&vk) || vk == VK_DECIMAL.0;
     if extended {
@@ -334,7 +399,7 @@ pub(crate) fn key_from_scancode(scancode: u32, extended: bool, vk: u16) -> Key {
 
 #[cfg(test)]
 mod tests {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_HOME, VK_NUMPAD7};
+    use windows::Win32::UI::Input::KeyboardAndMouse::VK_NUMPAD7;
 
     use super::*;
 
@@ -398,5 +463,40 @@ mod tests {
         assert!(!is_settings(Key::Comma, Mods::CTRL | Mods::SHIFT));
         assert!(!is_settings(Key::Comma, Mods::CTRL | Mods::ALT));
         assert!(!is_settings(Key::Period, Mods::CTRL));
+    }
+
+    #[test]
+    fn standard_shortcuts_map_to_commands() {
+        let ctrl = Mods::CTRL;
+        let shift = Mods::SHIFT;
+        let ctrl_shift = Mods::CTRL | Mods::SHIFT;
+        assert_eq!(command(b'C' as u16, ctrl), Some(Command::CopyOrInterrupt));
+        assert_eq!(
+            command(b'C' as u16, ctrl | Mods::NUM_LOCK),
+            Some(Command::CopyOrInterrupt)
+        );
+        assert_eq!(command(b'C' as u16, ctrl_shift), Some(Command::Copy));
+        assert_eq!(command(VK_INSERT.0, ctrl), Some(Command::Copy));
+        assert_eq!(command(b'V' as u16, ctrl), Some(Command::Paste));
+        assert_eq!(command(b'V' as u16, ctrl_shift), Some(Command::Paste));
+        assert_eq!(command(VK_INSERT.0, shift), Some(Command::Paste));
+        assert_eq!(command(b'A' as u16, ctrl_shift), Some(Command::SelectAll));
+        assert_eq!(command(VK_SPACE.0, Mods::ALT), Some(Command::SystemMenu));
+        assert_eq!(command(VK_PRIOR.0, shift), Some(Command::ScrollPage(-1)));
+        assert_eq!(command(VK_END.0, ctrl_shift), Some(Command::ScrollBottom));
+        assert_eq!(
+            command(VK_LEFT.0, shift),
+            Some(Command::Extend(Adjust::Left))
+        );
+    }
+
+    #[test]
+    fn shell_keys_are_left_alone() {
+        assert_eq!(command(b'A' as u16, Mods::CTRL), None);
+        assert_eq!(command(b'C' as u16, Mods::CTRL | Mods::ALT), None);
+        assert_eq!(command(b'V' as u16, Mods::default()), None);
+        assert_eq!(command(VK_PRIOR.0, Mods::default()), None);
+        assert_eq!(command(VK_LEFT.0, Mods::CTRL), None);
+        assert_eq!(command(b'Z' as u16, Mods::SHIFT), None);
     }
 }

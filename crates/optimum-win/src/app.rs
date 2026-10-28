@@ -6,14 +6,14 @@ use std::time::Instant;
 
 use optimum_core::{
     CellSize, ClickTiming, Config, GridSize, Key, Mods, MouseAction, MouseButton, MouseEvent,
-    MouseGeometry, Pointer, PtyEvent, SelectionGeometry, Session, WindowConfig, cell_at, grid_size,
-    scale, wrap,
+    MouseGeometry, Pointer, PtyEvent, Scroll, SelectionGeometry, Session, WindowConfig, cell_at,
+    grid_size, scale, wrap,
 };
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{ScreenToClient, ValidateRect};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemServices::{
-    MK_LBUTTON, MK_MBUTTON, MK_RBUTTON, MK_XBUTTON1, MK_XBUTTON2,
+    MK_CONTROL, MK_LBUTTON, MK_MBUTTON, MK_RBUTTON, MK_XBUTTON1, MK_XBUTTON2,
 };
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForSystem, GetDpiForWindow,
@@ -28,23 +28,24 @@ use windows::Win32::UI::WindowsAndMessaging::{
     DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetCaretBlinkTime, GetClientRect, GetMessageW,
     GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, HCURSOR, HTCLIENT, IDC_ARROW, IDC_IBEAM,
     IsIconic, IsZoomed, KillTimer, LoadCursorW, MINMAXINFO, MSG, PostMessageW, PostQuitMessage,
-    RegisterClassExW, SM_CXDOUBLECLK, SPI_GETWHEELSCROLLLINES, SW_RESTORE, SW_SHOWDEFAULT,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
+    RegisterClassExW, SC_KEYMENU, SM_CXDOUBLECLK, SPI_GETWHEELSCROLLLINES, SW_RESTORE,
+    SW_SHOWDEFAULT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
     SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetCursor, SetForegroundWindow, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, SystemParametersInfoW, TranslateMessage, WM_APP,
-    WM_CHAR, WM_CLOSE, WM_DEADCHAR, WM_DESTROY, WM_DPICHANGED, WM_ERASEBKGND, WM_GETMINMAXINFO,
-    WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION, WM_IME_SETCONTEXT, WM_IME_STARTCOMPOSITION,
-    WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
-    WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCCREATE,
-    WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR, WM_SETFOCUS, WM_SIZE,
-    WM_SYSCHAR, WM_SYSDEADCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDOWN, WM_XBUTTONUP,
-    WNDCLASSEXW, WS_EX_NOREDIRECTIONBITMAP, WS_OVERLAPPEDWINDOW, XBUTTON1,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, SystemParametersInfoW, TranslateMessage,
+    WINDOWPLACEMENT, WM_APP, WM_CHAR, WM_CLOSE, WM_DEADCHAR, WM_DESTROY, WM_DPICHANGED,
+    WM_ERASEBKGND, WM_GETMINMAXINFO, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION, WM_IME_SETCONTEXT,
+    WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCACTIVATE,
+    WM_NCCALCSIZE, WM_NCCREATE, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR,
+    WM_SETFOCUS, WM_SIZE, WM_SYSCHAR, WM_SYSCOMMAND, WM_SYSDEADCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    WM_TIMER, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSEXW, WS_EX_NOREDIRECTIONBITMAP,
+    WS_OVERLAPPEDWINDOW, XBUTTON1,
 };
 use windows::core::{PCWSTR, w};
 
 use crate::clipboard;
 use crate::ime::{self, Composition};
-use crate::keyboard::{self, Chars, Stroke};
+use crate::keyboard::{self, Chars, Command, Stroke};
 use crate::renderer::{Renderer, View};
 use crate::settings;
 use crate::window::{self, frame_thickness, hit_test, point_from_lparam, rect_size};
@@ -55,6 +56,8 @@ const WHEEL_DELTA: i32 = 120;
 const HOLD_TIMER: usize = 1;
 const HOLD_POLL_MS: u32 = 250;
 const BLINK_TIMER: usize = 2;
+const MIN_FONT_SIZE: f32 = 4.0;
+const MAX_FONT_SIZE: f32 = 96.0;
 
 pub fn run() -> ExitCode {
     // SAFETY: called once at startup, before any window exists.
@@ -222,11 +225,15 @@ struct App {
     focused: bool,
     preedit: String,
     settings_key_held: bool,
+    swallowed: Vec<u16>,
     high_surrogate: Option<u16>,
     wheel: (i32, i32),
     ibeam: Option<HCURSOR>,
     arrow: Option<HCURSOR>,
     selecting: bool,
+    extending: bool,
+    zoom: f32,
+    fullscreen: Option<WINDOWPLACEMENT>,
     started: Instant,
     config: Config,
     config_error: Option<String>,
@@ -254,6 +261,8 @@ enum After {
     SetCursor(Option<HCURSOR>),
     Copy(String),
     Paste,
+    SystemMenu,
+    Fullscreen,
     OpenSettings,
     Translucency(WindowConfig),
     Both(Box<After>, Box<After>),
@@ -296,6 +305,7 @@ impl App {
             focused: false,
             preedit: String::new(),
             settings_key_held: false,
+            swallowed: Vec::new(),
             high_surrogate: None,
             wheel: (0, 0),
             // SAFETY: loading a predefined system cursor has no preconditions.
@@ -303,6 +313,9 @@ impl App {
             // SAFETY: loading a predefined system cursor has no preconditions.
             arrow: unsafe { LoadCursorW(None, IDC_ARROW) }.ok(),
             selecting: false,
+            extending: false,
+            zoom: 0.0,
+            fullscreen: None,
             started: Instant::now(),
             config,
             config_error,
@@ -327,7 +340,33 @@ impl App {
 
     fn create_renderer(&mut self) {
         let (w, h) = self.client_size();
-        self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &self.config).ok();
+        self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &self.shown_config()).ok();
+        self.render();
+    }
+
+    fn shown_config(&self) -> Config {
+        let mut config = self.config.clone();
+        config.font.size = (config.font.size + self.zoom).clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
+        config
+    }
+
+    fn zoom(&mut self, step: Option<f32>) {
+        let size = self.config.font.size;
+        let wanted = step.map_or(size, |step| size + self.zoom + step);
+        let zoom = wanted.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE) - size;
+        if zoom == self.zoom {
+            return;
+        }
+        self.zoom = zoom;
+        let shown = self.shown_config();
+        if let Some(renderer) = &mut self.renderer
+            && renderer.configure(&shown).is_err()
+        {
+            self.renderer = None;
+            let (w, h) = self.client_size();
+            self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &shown).ok();
+        }
+        self.resize_session();
         self.render();
     }
 
@@ -372,12 +411,13 @@ impl App {
         }
         let window = config.window;
         self.config = config;
+        let shown = self.shown_config();
         if let Some(renderer) = &mut self.renderer
-            && renderer.configure(&self.config).is_err()
+            && renderer.configure(&shown).is_err()
         {
             self.renderer = None;
             let (w, h) = self.client_size();
-            self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &self.config).ok();
+            self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &shown).ok();
         }
         if let Some(session) = &mut self.session {
             let _ = session.configure(&self.config);
@@ -414,8 +454,9 @@ impl App {
             Change::Font(font) => {
                 self.config.font = font;
                 let text = self.tuner.as_ref().map(|t| t.text);
+                let shown = self.shown_config();
                 if let Some(renderer) = &mut self.renderer
-                    && renderer.configure(&self.config).is_ok()
+                    && renderer.configure(&shown).is_ok()
                     && let Some(text) = text
                 {
                     renderer.set_text_params(text);
@@ -493,7 +534,7 @@ impl App {
         };
         if renderer.render(frame, self.config.colors, view).is_err() {
             let (w, h) = self.client_size();
-            self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &self.config).ok();
+            self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &self.shown_config()).ok();
         }
         self.update_blink();
     }
@@ -578,6 +619,16 @@ impl App {
                 },
             );
         }
+        if let Some(command) = keyboard::command(stroke.vk, mods) {
+            if self.swallowed.contains(&stroke.vk) {
+                return (handled, After::Nothing);
+            }
+            if let Some(after) = self.command(command) {
+                self.swallowed.push(stroke.vk);
+                self.render();
+                return (handled, after);
+            }
+        }
         self.blink_on = true;
         let ctrl_alt = Mods::CTRL | Mods::ALT;
         let stripped = (!keyboard::printable(&chars.text) && mods.intersects(ctrl_alt))
@@ -591,6 +642,75 @@ impl App {
         (handled, After::Nothing)
     }
 
+    fn command(&mut self, command: Command) -> Option<After> {
+        let zoom = match command {
+            Command::ZoomIn => Some(Some(1.0)),
+            Command::ZoomOut => Some(Some(-1.0)),
+            Command::ZoomReset => Some(None),
+            Command::Fullscreen => return Some(After::Fullscreen),
+            Command::SystemMenu => return Some(After::SystemMenu),
+            _ => None,
+        };
+        if let Some(step) = zoom {
+            self.zoom(step);
+            return Some(After::Nothing);
+        }
+        let session = self.session.as_mut()?;
+        let selection = session.selection();
+        let history = !session.alternate_screen();
+        let after = match command {
+            Command::CopyOrInterrupt | Command::Copy => match selection {
+                Some(text) => {
+                    session.clear_selection();
+                    After::Copy(text)
+                }
+                None if command == Command::Copy => After::Nothing,
+                None => return None,
+            },
+            Command::Paste => After::Paste,
+            Command::SelectAll => {
+                let _ = session.select_all();
+                After::Nothing
+            }
+            Command::Escape => {
+                selection?;
+                session.clear_selection();
+                After::Nothing
+            }
+            Command::Extend(adjust) => {
+                selection?;
+                let _ = session.adjust_selection(adjust);
+                After::Nothing
+            }
+            Command::ScrollPage(pages) if history => {
+                session.scroll_pages(pages);
+                After::Nothing
+            }
+            Command::ScrollLine(lines) if history => {
+                session.scroll(Scroll::Lines(lines));
+                After::Nothing
+            }
+            Command::ScrollTop if history => {
+                session.scroll(Scroll::Top);
+                After::Nothing
+            }
+            Command::ScrollBottom if history => {
+                session.scroll(Scroll::Bottom);
+                After::Nothing
+            }
+            Command::ScrollPage(_)
+            | Command::ScrollLine(_)
+            | Command::ScrollTop
+            | Command::ScrollBottom
+            | Command::SystemMenu
+            | Command::ZoomIn
+            | Command::ZoomOut
+            | Command::ZoomReset
+            | Command::Fullscreen => return None,
+        };
+        Some(after)
+    }
+
     fn key_up(&mut self, wparam: WPARAM, lparam: LPARAM) -> Reply {
         let stroke = Stroke::new(wparam, lparam, false);
         if self.settings_key_held && stroke.key == Key::Comma {
@@ -598,6 +718,10 @@ impl App {
             return Reply::Value(LRESULT(0));
         }
         if stroke.vk == VK_PROCESSKEY.0 {
+            return Reply::Value(LRESULT(0));
+        }
+        if let Some(at) = self.swallowed.iter().position(|&vk| vk == stroke.vk) {
+            self.swallowed.swap_remove(at);
             return Reply::Value(LRESULT(0));
         }
         let unshifted = keyboard::translate(stroke, false, true).and_then(single_char);
@@ -705,10 +829,21 @@ impl App {
         let Some(session) = &mut self.session else {
             return After::Nothing;
         };
+        let shift = keyboard::mods().binding() == Mods::SHIFT;
         let after = match (button, action) {
+            (MouseButton::Left, MouseAction::Press)
+                if shift && session.extend_selection(pointer).unwrap_or(false) =>
+            {
+                self.extending = true;
+                After::Nothing
+            }
             (MouseButton::Left, MouseAction::Press) => {
                 self.selecting = session.select_press(pointer, timing).is_ok();
                 After::Nothing
+            }
+            (MouseButton::Left, MouseAction::Release) if self.extending => {
+                self.extending = false;
+                session.selection().map_or(After::Nothing, After::Copy)
             }
             (MouseButton::Left, MouseAction::Release) if self.selecting => {
                 self.selecting = false;
@@ -742,7 +877,7 @@ impl App {
         };
         let held = held_buttons(wparam);
         let point = point_from_lparam(lparam);
-        let local = if self.reports_mouse(keyboard::mods()) && !self.selecting {
+        let local = if self.reports_mouse(keyboard::mods()) && !self.selecting && !self.extending {
             self.report(action, Some(button), point, held.is_some());
             After::Nothing
         } else {
@@ -764,11 +899,15 @@ impl App {
     fn mouse_move(&mut self, wparam: WPARAM, lparam: LPARAM) {
         let held = held_buttons(wparam);
         let point = point_from_lparam(lparam);
-        if self.selecting && held == Some(MouseButton::Left) {
+        if (self.selecting || self.extending) && held == Some(MouseButton::Left) {
             let pointer = self.pointer(point);
             let geometry = self.selection_geometry();
             if let Some(session) = &mut self.session {
-                let _ = session.select_drag(pointer, geometry);
+                let _ = if self.extending {
+                    session.extend_selection(pointer).map(|_| ())
+                } else {
+                    session.select_drag(pointer, geometry)
+                };
             }
             self.render();
         } else if self.reports_mouse(keyboard::mods()) {
@@ -792,6 +931,10 @@ impl App {
         let steps = *total / WHEEL_DELTA;
         *total %= WHEEL_DELTA;
         if steps == 0 {
+            return;
+        }
+        if vertical && wparam.0 & MK_CONTROL.0 as usize != 0 {
+            self.zoom(Some(steps as f32));
             return;
         }
         let tracking = self.session.as_ref().is_some_and(Session::mouse_tracking);
@@ -913,8 +1056,15 @@ impl App {
                 (Reply::Value(LRESULT(1)), After::SetCursor(cursor))
             }
             WM_NCCALCSIZE if wparam.0 != 0 => {
-                window::calc_size(lparam, self.maximized(), self.dpi);
+                window::calc_size(
+                    lparam,
+                    self.maximized() && self.fullscreen.is_none(),
+                    self.dpi,
+                );
                 (Reply::Value(LRESULT(0)), After::Nothing)
+            }
+            WM_NCHITTEST if self.fullscreen.is_some() => {
+                (Reply::Value(LRESULT(HTCLIENT as isize)), After::Nothing)
             }
             WM_NCHITTEST => {
                 let mut rect = RECT::default();
@@ -941,7 +1091,8 @@ impl App {
                 if let Some(renderer) = &mut self.renderer
                     && renderer.resize(w, h).is_err()
                 {
-                    self.renderer = Renderer::new(self.hwnd, w, h, self.dpi, &self.config).ok();
+                    self.renderer =
+                        Renderer::new(self.hwnd, w, h, self.dpi, &self.shown_config()).ok();
                 }
                 self.resize_session();
                 self.render();
@@ -1126,6 +1277,25 @@ unsafe fn perform(hwnd: HWND, app: *mut App, after: After) {
                 if let Some(text) = clipboard::get(hwnd) {
                     (*app).paste(&text);
                 }
+            }
+            After::Fullscreen => {
+                let saved = (*app).fullscreen.take();
+                let next = match saved {
+                    Some(placement) => {
+                        window::leave_fullscreen(hwnd, &placement);
+                        None
+                    }
+                    None => window::enter_fullscreen(hwnd),
+                };
+                (*app).fullscreen = next;
+            }
+            After::SystemMenu => {
+                let _ = PostMessageW(
+                    Some(hwnd),
+                    WM_SYSCOMMAND,
+                    WPARAM(SC_KEYMENU as usize),
+                    LPARAM(i32::from(b' ') as isize),
+                );
             }
             After::OpenSettings => {
                 settings::open();

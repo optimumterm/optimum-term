@@ -4,15 +4,21 @@ use optimum_core::WindowConfig;
 
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
-    DWMSBT_NONE, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
-    DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+    DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_NONE, DWMWA_SYSTEMBACKDROP_TYPE,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND, DwmExtendFrameIntoClientArea,
+    DwmSetWindowAttribute,
+};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::HiDpi::GetSystemMetricsForDpi;
 use windows::Win32::UI::WindowsAndMessaging::{
-    DestroyIcon, HICON, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_DEFAULTCOLOR, LoadImageW, SM_CXICON,
-    SM_CXSMICON, SendMessageW, WM_SETICON,
+    DestroyIcon, GWL_STYLE, GetWindowLongPtrW, GetWindowPlacement, HICON, HWND_TOP, ICON_BIG,
+    ICON_SMALL, IMAGE_ICON, LR_DEFAULTCOLOR, LoadImageW, SM_CXICON, SM_CXSMICON, SWP_FRAMECHANGED,
+    SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, SendMessageW, SetWindowLongPtrW,
+    SetWindowPlacement, SetWindowPos, WINDOWPLACEMENT, WM_SETICON, WS_OVERLAPPEDWINDOW, WS_POPUP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION, HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT,
@@ -38,22 +44,82 @@ pub(crate) fn frame_thickness(dpi: u32) -> (i32, i32) {
 
 pub(crate) fn enable_frameless(hwnd: HWND) {
     let margins = MARGINS::default();
-    let corners = DWMWCP_ROUND;
     let backdrop = DWMSBT_NONE;
+    set_corners(hwnd, DWMWCP_ROUND);
     // SAFETY: `hwnd` is a live top-level window; each attribute value points to a value of the size passed. Older Windows versions reject the backdrop attribute, which is ignored.
     unsafe {
         let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
         let _ = DwmSetWindowAttribute(
             hwnd,
-            DWMWA_WINDOW_CORNER_PREFERENCE,
-            (&raw const corners).cast::<c_void>(),
-            size_of_val(&corners) as u32,
-        );
-        let _ = DwmSetWindowAttribute(
-            hwnd,
             DWMWA_SYSTEMBACKDROP_TYPE,
             (&raw const backdrop).cast::<c_void>(),
             size_of_val(&backdrop) as u32,
+        );
+    }
+}
+
+fn set_corners(hwnd: HWND, corners: DWM_WINDOW_CORNER_PREFERENCE) {
+    // SAFETY: `hwnd` is a live top-level window; the value points to a corner preference of the size passed.
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            (&raw const corners).cast::<c_void>(),
+            size_of_val(&corners) as u32,
+        )
+    };
+}
+
+pub(crate) fn enter_fullscreen(hwnd: HWND) -> Option<WINDOWPLACEMENT> {
+    let mut placement = WINDOWPLACEMENT {
+        length: size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    let mut monitor = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `hwnd` is a live top-level window; both out-structs carry their size.
+    unsafe {
+        GetWindowPlacement(hwnd, &mut placement).ok()?;
+        let screen = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if !GetMonitorInfoW(screen, &mut monitor).as_bool() {
+            return None;
+        }
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        let style = (style & !WS_OVERLAPPEDWINDOW.0) | WS_POPUP.0;
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style as isize);
+        set_corners(hwnd, DWMWCP_DONOTROUND);
+        let area = monitor.rcMonitor;
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOP),
+            area.left,
+            area.top,
+            area.right - area.left,
+            area.bottom - area.top,
+            SWP_FRAMECHANGED | SWP_NOOWNERZORDER,
+        );
+    }
+    Some(placement)
+}
+
+pub(crate) fn leave_fullscreen(hwnd: HWND, placement: &WINDOWPLACEMENT) {
+    // SAFETY: `hwnd` is a live top-level window; `placement` was read from it by `enter_fullscreen`.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        let style = (style & !WS_POPUP.0) | WS_OVERLAPPEDWINDOW.0;
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style as isize);
+        set_corners(hwnd, DWMWCP_ROUND);
+        let _ = SetWindowPlacement(hwnd, placement);
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER,
         );
     }
 }
