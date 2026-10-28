@@ -6,7 +6,7 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let ghostty = manifest_dir.join("../../vendor/ghostty");
-    let ghostty = ghostty.canonicalize().unwrap_or(ghostty);
+    let ghostty = ghostty.canonicalize().map(plain).unwrap_or(ghostty);
 
     if !ghostty.join("build.zig").exists() {
         panic!(
@@ -24,6 +24,13 @@ fn main() {
     build_ghostty(&ghostty, &prefix, &out_dir.join("zig-cache"));
     link(&prefix.join("lib"));
     generate_bindings(&ghostty.join("include"), &out_dir.join("bindings.rs"));
+}
+
+fn plain(path: PathBuf) -> PathBuf {
+    match path.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        Some(stripped) if !stripped.starts_with("UNC\\") => PathBuf::from(stripped),
+        _ => path,
+    }
 }
 
 fn build_ghostty(source: &Path, prefix: &Path, cache: &Path) {
