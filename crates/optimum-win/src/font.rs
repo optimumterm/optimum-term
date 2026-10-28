@@ -356,8 +356,10 @@ impl Fonts {
                     let mut rgb = vec![0u8; (width * height * 3) as usize];
                     analysis.CreateAlphaTexture(DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds, &mut rgb)?;
                     let rgba = rgb
-                        .chunks_exact(3)
-                        .flat_map(|p| [p[0], p[1], p[2], p[0].max(p[1]).max(p[2])])
+                        .as_chunks::<3>()
+                        .0
+                        .iter()
+                        .flat_map(|&[r, g, b]| [r, g, b, r.max(g).max(b)])
                         .collect();
                     return Ok(Some(bitmap(bounds, rgba)));
                 }
