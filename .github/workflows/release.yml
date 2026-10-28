@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  LIBCLANG_PATH: C:\Program Files\LLVM\bin
+  TARGET: x86_64-pc-windows-gnu
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - run: cargo install --locked cargo-zigbuild
+
+      - run: cargo-zigbuild test --target $env:TARGET --workspace
+      - run: cargo-zigbuild build --release --target $env:TARGET -p optimum
+
+      - run: choco install innosetup --version 6.7.3 --no-progress -y
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          $name = "optimum-$version-windows-x64"
+          $out = "target\$env:TARGET\release"
+          New-Item -ItemType Directory -Force -Path dist\$name | Out-Null
+          Copy-Item "$out\optimum.exe", "$out\conpty.dll", "$out\OpenConsole.exe", LICENSE, THIRD_PARTY_NOTICES.md, README.md dist\$name
+          Compress-Archive -Path dist\$name -DestinationPath dist\$name.zip
+          $setup = "optimum-setup-$version.exe"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q "/DAppVersion=$version" "/O$pwd\dist" installer\optimum.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          foreach ($file in "$name.zip", $setup) {
+            (Get-FileHash dist\$file -Algorithm SHA256).Hash.ToLower() + "  $file" | Out-File -Encoding ascii dist\$file.sha256
+          }
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.exe
+            dist/*.sha256
