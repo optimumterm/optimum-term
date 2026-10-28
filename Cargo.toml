@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["crates/ghostty-vt-sys", "crates/ghostty-vt", "crates/optimum-core", "crates/optimum-win", "crates/optimum", "crates/optimum-icon"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "0BSD"
+publish = false
+
+[workspace.dependencies]
+ghostty-vt-sys = { path = "crates/ghostty-vt-sys" }
+ghostty-vt = { path = "crates/ghostty-vt" }
+optimum-core = { path = "crates/optimum-core" }
+optimum-win = { path = "crates/optimum-win" }
+optimum-icon = { path = "crates/optimum-icon" }
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"

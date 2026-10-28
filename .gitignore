@@ -1,0 +1,11 @@
+/target
+/dist
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+.idea/
+.vscode/
+*.swp
+*~
