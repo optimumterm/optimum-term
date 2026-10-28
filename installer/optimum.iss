@@ -23,6 +23,7 @@ LicenseFile=..\LICENSE
 SetupIconFile=..\assets\optimum.ico
 UninstallDisplayIcon={app}\optimum.exe
 UninstallDisplayName=Optimum
+ChangesAssociations=yes
 WizardStyle=modern
 WizardImageFile=wizard-100.bmp,wizard-125.bmp,wizard-150.bmp,wizard-200.bmp
 WizardSmallImageFile=wizard-small-100.bmp,wizard-small-125.bmp,wizard-small-150.bmp,wizard-small-200.bmp
