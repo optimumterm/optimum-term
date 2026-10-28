@@ -4,6 +4,7 @@ mod error;
 mod frame;
 mod layout;
 mod pty;
+mod scene;
 mod session;
 
 pub use color::{DEFAULT_BACKGROUND, Rgb, Theme};
@@ -19,4 +20,8 @@ pub use ghostty_vt::{
 };
 pub use layout::{BASE_DPI, CellSize, DEFAULT_PADDING, cell_at, grid_size, scale, wrap};
 pub use pty::{GridSize, Pty, PtyEvent};
+pub use scene::{
+    ATLAS_SIZE, Bitmap, CLEARTYPE, COLOR, CellMetrics, GRAYSCALE, GlyphSource, Instance, Layout,
+    SOLID, Scene, Upload, View, overlay_columns, pack,
+};
 pub use session::Session;
