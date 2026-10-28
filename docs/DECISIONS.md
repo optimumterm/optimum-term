@@ -356,7 +356,7 @@ ADR-style log. Each entry: decision, date, why.
 - **Script:** `installer/optimum.iss`. `WizardStyle=modern`, pages: licence (0BSD), install mode (current user by default, all users with elevation if chosen), folder, an unchecked desktop-shortcut task, progress, finish with "Launch Optimum". Fixed `AppId` `1191DD23-A70B-4FFB-B77D-37FE0F1A8601`. Default folder `{autopf}\Optimum`, which is `%LOCALAPPDATA%\Programs\Optimum` per user. `CloseApplications=yes` closes a running Optimum through Restart Manager before replacing files. 12 UI languages, chosen from the Windows UI language.
 - **Uninstall:** Inno's uninstaller, registered in Installed apps. It removes only installed files; `%APPDATA%\Optimum\config.toml` is kept.
 - **Images:** `installer/wizard-{100,125,150,200}.bmp` (164×314 at 100%) and `wizard-small-*.bmp` (55×55 at 100%), generated from the icon.
-- **Tooling:** Inno Setup 6.7.3, sha256 `9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732` for `innosetup-6.7.3.exe`. CI installs it with Chocolatey; locally it runs as a portable install outside the repo. Inno Setup's licence allows redistributing installers built with it.
+- **Tooling:** Inno Setup 6.7.3, sha256 `9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732` for `innosetup-6.7.3.exe`. The release workflow downloads it from the jrsoftware/issrc GitHub release, checks this hash and installs it portable (Chocolatey has no 6.7.3 package); locally it is the same portable install outside the repo. Inno Setup's licence allows redistributing installers built with it.
 - **`optimum-icon`** goes back to embedding only the icon.
 - **Verified:** the script compiles with ISCC 6.7.3 into a 5 MB installer. The wizard is checked by hand on Windows.
 

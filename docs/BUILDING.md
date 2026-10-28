@@ -51,5 +51,5 @@ A release is a zip, `optimum-<version>-windows-x64.zip`, holding one folder with
   ```sh
   ISCC.exe /DAppVersion=<version> installer\optimum.iss
   ```
-  It reads the files from `target\x86_64-pc-windows-gnu\release` (override with `/DBinDir=…`) and writes `target\installer\optimum-setup-<version>.exe`. From WSL, run `ISCC.exe` through interop with `$(wslpath -w installer/optimum.iss)`. No install needed: Inno's own installer accepts `/VERYSILENT /CURRENTUSER /PORTABLE=1 /DIR=<folder>`. CI installs it with `choco install innosetup --version 6.7.3`. The wizard images `installer/wizard-*.bmp` are generated from `assets/png/optimum-256.png`.
+  It reads the files from `target\x86_64-pc-windows-gnu\release` (override with `/DBinDir=…`) and writes `target\installer\optimum-setup-<version>.exe`. From WSL, run `ISCC.exe` through interop with `$(wslpath -w installer/optimum.iss)`. No install needed: Inno's own installer accepts `/VERYSILENT /CURRENTUSER /PORTABLE=1 /DIR=<folder>`. The release workflow downloads `innosetup-6.7.3.exe` from the jrsoftware/issrc GitHub release, checks its sha256 and installs it the same way. The wizard images `installer/wizard-*.bmp` are generated from `assets/png/optimum-256.png`.
 - **Not done yet:** MSIX and code signing.
