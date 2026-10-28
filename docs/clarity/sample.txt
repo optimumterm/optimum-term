@@ -1,0 +1,13 @@
+Optimum clarity sample · JetBrainsMono Nerd Font 12pt
+mnhuMNHU  il1I|!  oO0Q  rnm wvW  ;:,.  `'"  ()[]{}<>
+The quick brown fox jumps over the lazy dog 0123456789
+THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG ~!@#$%^&*
+Съешь же ещё этих мягких французских булок, да выпей чаю
+fn main() { let x: Vec<u8> = (0..=255).collect(); }
+-> => != >= <= == === /* */ // :: ... www
+[1mbold text 0123[0m [3mitalic text[0m [4munderline[0m
+[31mred [32mgreen [33myellow [34mblue [35mmagenta [36mcyan [37mwhite[0m
+[30;47m dark on light [0m [38;2;120;120;120mgrey 120[0m [38;2;255;255;255mwhite 255[0m
+┌──────┬──────┐ ░▒▓█ ▀▄▌▐
+│ box  │ draw │ ⠿⣿ ●○◆
+└──────┴──────┘ 日本語テキスト 中文
