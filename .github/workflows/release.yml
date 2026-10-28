@@ -33,7 +33,15 @@ jobs:
       - run: cargo-zigbuild test --target $env:TARGET --workspace
       - run: cargo-zigbuild build --release --target $env:TARGET -p optimum
 
-      - run: choco install innosetup --version 6.7.3 --no-progress -y
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $setup = "$env:RUNNER_TEMP\innosetup-6.7.3.exe"
+          Invoke-WebRequest https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe -OutFile $setup
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732") { throw "Inno Setup hash mismatch: $hash" }
+          Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/CURRENTUSER", "/PORTABLE=1", "/DIR=$env:RUNNER_TEMP\inno" -Wait
+          if (-not (Test-Path "$env:RUNNER_TEMP\inno\ISCC.exe")) { throw "ISCC.exe not found" }
 
       - name: Package
         shell: pwsh
@@ -45,7 +53,7 @@ jobs:
           Copy-Item "$out\optimum.exe", "$out\conpty.dll", "$out\OpenConsole.exe", LICENSE, THIRD_PARTY_NOTICES.md, README.md dist\$name
           Compress-Archive -Path dist\$name -DestinationPath dist\$name.zip
           $setup = "optimum-setup-$version.exe"
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q "/DAppVersion=$version" "/O$pwd\dist" installer\optimum.iss
+          & "$env:RUNNER_TEMP\inno\ISCC.exe" /Q "/DAppVersion=$version" "/O$pwd\dist" installer\optimum.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
           foreach ($file in "$name.zip", $setup) {
             (Get-FileHash dist\$file -Algorithm SHA256).Hash.ToLower() + "  $file" | Out-File -Encoding ascii dist\$file.sha256
