@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
 use ghostty_vt::{
-    ClickTiming, Key, KeyEncoder, KeyEvent, Mode, Mods, MouseEncoder, MouseEvent, MouseGeometry,
-    Pointer, RenderState, Scroll, SelectionGeometry, Terminal, encode_focus, encode_paste,
+    Adjust, ClickTiming, Key, KeyEncoder, KeyEvent, Mode, Mods, MouseEncoder, MouseEvent,
+    MouseGeometry, Pointer, RenderState, Scroll, SelectionGeometry, Terminal, encode_focus,
+    encode_paste,
 };
 
 const HOLD_LIMIT: Duration = Duration::from_secs(1);
@@ -112,12 +113,14 @@ impl<P: Pty> Session<P> {
         self.keys.encode(&self.terminal, event, &mut self.encoded)?;
         if !self.encoded.is_empty() {
             self.terminal.scroll(Scroll::Bottom);
+            self.terminal.clear_selection();
         }
         self.flush_encoded()
     }
 
     pub fn text(&mut self, text: &str) -> Result<(), Error> {
         self.terminal.scroll(Scroll::Bottom);
+        self.terminal.clear_selection();
         Ok(self.pty.write(text.as_bytes())?)
     }
 
@@ -125,7 +128,43 @@ impl<P: Pty> Session<P> {
         let bracketed = self.terminal.mode(Mode::BracketedPaste);
         let encoded = encode_paste(text, bracketed)?;
         self.terminal.scroll(Scroll::Bottom);
+        self.terminal.clear_selection();
         Ok(self.pty.write(&encoded)?)
+    }
+
+    pub fn selection(&self) -> Option<String> {
+        self.terminal
+            .selection_text()
+            .filter(|text| !text.is_empty())
+    }
+
+    pub fn select_all(&mut self) -> Result<(), Error> {
+        Ok(self.terminal.select_all()?)
+    }
+
+    pub fn extend_selection(&mut self, pointer: Pointer) -> Result<bool, Error> {
+        Ok(self.terminal.extend_selection(pointer)?)
+    }
+
+    pub fn adjust_selection(&mut self, adjust: Adjust) -> Result<bool, Error> {
+        Ok(self.terminal.adjust_selection(adjust)?)
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.terminal.clear_selection();
+    }
+
+    pub fn scroll(&mut self, scroll: Scroll) {
+        self.terminal.scroll(scroll);
+    }
+
+    pub fn scroll_pages(&mut self, pages: isize) {
+        let rows = self.size.rows.max(1) as isize;
+        self.terminal.scroll(Scroll::Lines(pages * rows));
+    }
+
+    pub fn alternate_screen(&self) -> bool {
+        self.terminal.alternate_screen()
     }
 
     pub fn take_clipboard(&mut self) -> Option<String> {

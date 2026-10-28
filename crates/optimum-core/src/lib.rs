@@ -14,8 +14,8 @@ pub use config::{
 pub use error::Error;
 pub use frame::{Cell, Frame, FrameCursor, Row};
 pub use ghostty_vt::{
-    ClickTiming, CursorStyle, Key, KeyAction, KeyEvent, Mods, MouseAction, MouseButton, MouseEvent,
-    MouseGeometry, Pointer, SelectionGeometry, codepoint_width,
+    Adjust, ClickTiming, CursorStyle, Key, KeyAction, KeyEvent, Mods, MouseAction, MouseButton,
+    MouseEvent, MouseGeometry, Pointer, Scroll, SelectionGeometry, codepoint_width,
 };
 pub use layout::{BASE_DPI, CellSize, DEFAULT_PADDING, cell_at, grid_size, scale, wrap};
 pub use pty::{GridSize, Pty, PtyEvent};
