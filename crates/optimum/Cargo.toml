@@ -1,0 +1,15 @@
+[package]
+name = "optimum"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+optimum-win.workspace = true
+
+[build-dependencies]
+optimum-icon.workspace = true
+
+[lints]
+workspace = true
