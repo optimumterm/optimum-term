@@ -7,8 +7,13 @@ fn main() -> ExitCode {
     optimum_win::run()
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn main() -> ExitCode {
-    eprintln!("Optimum currently runs on Windows only.");
+    optimum_mac::run()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn main() -> ExitCode {
+    eprintln!("Optimum runs on Windows and macOS only.");
     ExitCode::FAILURE
 }
