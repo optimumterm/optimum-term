@@ -1,0 +1,12 @@
+[package]
+name = "ghostty-vt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ghostty-vt-sys.workspace = true
+
+[lints]
+workspace = true
