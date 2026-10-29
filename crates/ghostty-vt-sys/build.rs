@@ -44,6 +44,7 @@ fn build_ghostty(source: &Path, prefix: &Path, cache: &Path) {
     cmd.current_dir(source)
         .arg("build")
         .arg("-Demit-lib-vt=true")
+        .arg("-Demit-xcframework=false")
         .arg(format!("-Doptimize={optimize}"))
         .arg("--prefix")
         .arg(prefix)
