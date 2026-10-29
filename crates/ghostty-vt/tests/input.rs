@@ -69,9 +69,20 @@ fn ctrl_letters_become_c0_even_on_cyrillic_layouts() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn alt_prefixes_escape() {
     let term = Terminal::new(80, 24).unwrap();
     assert_eq!(encode(&term, text(Key::X, Mods::ALT, "x", 'x')), b"\x1bx");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn option_sends_its_text() {
+    let term = Terminal::new(80, 24).unwrap();
+    assert_eq!(
+        encode(&term, text(Key::X, Mods::ALT, "≈", 'x')),
+        "≈".as_bytes()
+    );
 }
 
 #[test]
