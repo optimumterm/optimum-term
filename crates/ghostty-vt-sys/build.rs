@@ -93,6 +93,7 @@ fn generate_bindings(include: &Path, out: &Path) {
         .header(include.join("ghostty/vt.h").to_string_lossy())
         .clang_arg(format!("-I{}", include.display()))
         .clang_arg("-DGHOSTTY_STATIC")
+        .clang_arg("-std=c23")
         .allowlist_function("ghostty_.*")
         .allowlist_type("Ghostty.*")
         .allowlist_var("GHOSTTY_.*")
