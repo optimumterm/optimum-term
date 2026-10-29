@@ -1,4 +1,4 @@
-# Optimum Term
+# Optimum term
 
 A minimal terminal for Windows, made mainly for WSL.
 
