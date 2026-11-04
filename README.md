@@ -103,11 +103,21 @@ JetBrains Mono Nerd Font is bundled, so prompt and file icons work out of the bo
 
 The macOS version is early and not tested much yet. It needs an Apple Silicon Mac with macOS 13 or newer. It opens your login shell (the one set for your user, usually zsh) in your home folder.
 
-Download `Optimum-<version>-macos-arm64.zip` from the [releases page](../../releases), unzip it and move `Optimum.app` to Applications. The app isn't signed or notarized yet, so macOS will refuse to open it. Run this once in Terminal:
+### Install on macOS
 
-```
-xattr -dr com.apple.quarantine /Applications/Optimum.app
-```
+1. Download `Optimum-<version>-macos-arm64.zip` from the [releases page](../../releases).
+2. Unzip it and move `Optimum.app` to Applications.
+3. Open Terminal and run this once:
+
+   ```
+   xattr -dr com.apple.quarantine /Applications/Optimum.app
+   ```
+
+4. Open Optimum from Applications as usual.
+
+Why step 3: Optimum is free and has no paid Apple developer account, so the app isn't signed with an Apple Developer ID or notarized. macOS blocks apps like that when they come from the internet. Depending on the macOS version it says that Apple can't check the app for malicious software, or that the app "is damaged and can't be opened". The app isn't damaged. The command removes the "downloaded from the internet" mark, and macOS stops blocking it. You need to run it again after each update.
+
+If you skipped step 3 and macOS already blocked the app, you can also allow it in **System Settings → Privacy & Security**: scroll down and click **Open Anyway** next to the message about Optimum. This button doesn't appear when macOS says the app is damaged, so the command is the reliable way.
 
 It works like the Windows version, with Mac shortcuts:
 
