@@ -23,7 +23,7 @@ optimum → optimum-win | optimum-mac | optimum-linux → optimum-core → ghost
 
 ## Assets
 
-`assets/`: app icon (SVG, 1024 px PNG, generated multi-size `.ico`), embedded into `optimum.exe` by `crates/optimum/build.rs` (ADR-016).
+`assets/`: app icon sources (`optimum-win.svg`, `optimum-mac.svg`) and the files generated from them: multi-size `optimum.ico` (embedded into `optimum.exe` by `crates/optimum/build.rs`), `png/`, and `optimum.icns` (copied into `Optimum.app` by `installer/macos/bundle.sh`) (ADR-016).
 
 ## Fonts
 
