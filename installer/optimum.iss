@@ -32,7 +32,7 @@ RestartApplications=no
 Compression=lzma2/max
 SolidCompression=yes
 OutputDir=..\target\installer
-OutputBaseFilename=optimum-setup-{#AppVersion}
+OutputBaseFilename=Optimum
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
