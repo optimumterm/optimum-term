@@ -48,24 +48,15 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          $name = "optimum-$version-windows-x64"
-          $out = "target\$env:TARGET\release"
-          New-Item -ItemType Directory -Force -Path dist\$name | Out-Null
-          Copy-Item "$out\optimum.exe", "$out\conpty.dll", "$out\OpenConsole.exe", LICENSE, THIRD_PARTY_NOTICES.md, README.md dist\$name
-          Compress-Archive -Path dist\$name -DestinationPath dist\$name.zip
-          $setup = "optimum-setup-$version.exe"
           & "$env:RUNNER_TEMP\inno\ISCC.exe" /Q "/DAppVersion=$version" "/O$pwd\dist" installer\optimum.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          foreach ($file in "$name.zip", $setup) {
-            (Get-FileHash dist\$file -Algorithm SHA256).Hash.ToLower() + "  $file" | Out-File -Encoding ascii dist\$file.sha256
-          }
+          (Get-FileHash dist\Optimum.exe -Algorithm SHA256).Hash.ToLower() + "  Optimum.exe" | Out-File -Encoding ascii dist\Optimum.exe.sha256
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.zip
-            dist/*.exe
-            dist/*.sha256
+            dist/Optimum.exe
+            dist/Optimum.exe.sha256
 
   macos:
     runs-on: macos-15
@@ -88,13 +79,25 @@ jobs:
       - name: Package
         run: |
           version="${GITHUB_REF_NAME#v}"
-          name="Optimum-$version-macos-arm64.zip"
           installer/macos/bundle.sh "$version" target/release/optimum dist
-          ditto -c -k --keepParent dist/Optimum.app "dist/$name"
-          (cd dist && shasum -a 256 "$name" > "$name.sha256")
+          installer/macos/dmg.sh dist/Optimum.app dist/Optimum.dmg
+          (cd dist && shasum -a 256 Optimum.dmg > Optimum.dmg.sha256)
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.zip
-            dist/*.sha256
+            dist/Optimum.dmg
+            dist/Optimum.dmg.sha256
+
+  prune:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete older releases
+        run: |
+          gh release list --limit 1000 --json tagName --jq '.[].tagName' |
+            grep -vxF "$GITHUB_REF_NAME" |
+            while read -r tag; do gh release delete "$tag" --yes; done
