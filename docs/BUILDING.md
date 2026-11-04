@@ -55,9 +55,9 @@ Linking, tests and the app bundle need macOS, so they run in CI on `macos-15`. E
 
 A release holds two files without a version in their names (ADR-030): `Optimum.exe` (the Windows installer) and `Optimum.dmg`, each with a `.sha256`.
 
-- **CI:** pushing a tag `v<version>` runs `.github/workflows/release.yml`. The `windows-latest` job tests, builds the release exe, builds the installer and its checksum. The `macos-15` job tests, builds `Optimum.app`, packs it into `Optimum.dmg` with a checksum. Both attach their files to the same GitHub Release. A last job then deletes every other release, so only the latest one exists; git tags are kept.
+- **CI:** every push to `main` that changes more than Markdown or `docs/` runs `.github/workflows/release.yml` (ADR-030). A first job picks the next version: major and minor from `version` in the root `Cargo.toml`, patch one above the highest `v<major>.<minor>.*` tag. It creates a draft release for that tag; the build jobs write the version into `Cargo.toml` before building and upload their files to the draft. The `windows-latest` job tests, builds the release exe, builds the installer and its checksum. The `macos-15` job tests, builds `Optimum.app`, packs it into `Optimum.dmg` with a checksum. A last job publishes the draft as the latest release (creating the tag) and deletes every other release, so only the latest one exists; git tags are kept. Runs are queued, never parallel.
 - **Locally from WSL:** build with `cargo-zigbuild build --release --target x86_64-pc-windows-gnu -p optimum`, then run the installer step below.
-- **Before tagging:** bump `version` in the root `Cargo.toml`, and regenerate the Rust crate list in `THIRD_PARTY_NOTICES.md` if dependencies changed (ADR-022).
+- **Version:** no manual tagging. To start a new minor or major line, change `version` in the root `Cargo.toml` (e.g. `0.2.0`); the patch number is ignored there. Regenerate the Rust crate list in `THIRD_PARTY_NOTICES.md` if dependencies changed (ADR-022).
 - **Installer:** `installer/optimum.iss` is an [Inno Setup](https://jrsoftware.org/isinfo.php) 6 script (ADR-025). After the release build, compile it on Windows:
   ```sh
   ISCC.exe /DAppVersion=<version> installer\optimum.iss
