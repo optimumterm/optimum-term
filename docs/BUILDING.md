@@ -49,18 +49,18 @@ rustup target add aarch64-apple-darwin
 cargo-zigbuild clippy --target aarch64-apple-darwin --workspace --all-targets -- -D warnings
 ```
 
-Linking, tests and the app bundle need macOS, so they run in CI on `macos-15`. Every push to `main` uploads `Optimum-macos.zip` as a workflow artifact (ADR-029). On a Mac, unzip it, run `xattr -dr com.apple.quarantine Optimum.app` (the build is not notarized), then open it. On a Mac with Rust and Zig, `cargo build --release -p optimum` followed by `installer/macos/bundle.sh <version> target/release/optimum dist` produces the same bundle.
+Linking, tests and the app bundle need macOS, so they run in CI on `macos-15`. Every push to `main` uploads `Optimum.dmg` as a workflow artifact (ADR-030). On a Mac, open it, drag Optimum to Applications, run `xattr -dr com.apple.quarantine Optimum.app` (the build is not notarized), then open it. On a Mac with Rust and Zig, `cargo build --release -p optimum` followed by `installer/macos/bundle.sh <version> target/release/optimum dist` produces the same bundle, and `installer/macos/dmg.sh dist/Optimum.app dist/Optimum.dmg` the disk image.
 
 ## Packaging (M8)
 
-A release is a zip, `optimum-<version>-windows-x64.zip`, holding one folder with `optimum.exe`, `conpty.dll`, `OpenConsole.exe`, `LICENSE`, `THIRD_PARTY_NOTICES.md` and `README.md`. A `.sha256` file goes next to it.
+A release holds two files without a version in their names (ADR-030): `Optimum.exe` (the Windows installer) and `Optimum.dmg`, each with a `.sha256`.
 
-- **CI:** pushing a tag `v<version>` runs `.github/workflows/release.yml`. The `windows-latest` job tests, builds the release exe, packages the zip, the installer and checksums. The `macos-15` job tests, builds `Optimum.app`, zips it as `Optimum-<version>-macos-arm64.zip` with a checksum. Both attach their files to the same GitHub Release.
-- **Locally from WSL:** build with `cargo-zigbuild build --release --target x86_64-pc-windows-gnu -p optimum`, copy those six files into a folder, and zip it with PowerShell's `Compress-Archive`.
+- **CI:** pushing a tag `v<version>` runs `.github/workflows/release.yml`. The `windows-latest` job tests, builds the release exe, builds the installer and its checksum. The `macos-15` job tests, builds `Optimum.app`, packs it into `Optimum.dmg` with a checksum. Both attach their files to the same GitHub Release. A last job then deletes every other release, so only the latest one exists; git tags are kept.
+- **Locally from WSL:** build with `cargo-zigbuild build --release --target x86_64-pc-windows-gnu -p optimum`, then run the installer step below.
 - **Before tagging:** bump `version` in the root `Cargo.toml`, and regenerate the Rust crate list in `THIRD_PARTY_NOTICES.md` if dependencies changed (ADR-022).
 - **Installer:** `installer/optimum.iss` is an [Inno Setup](https://jrsoftware.org/isinfo.php) 6 script (ADR-025). After the release build, compile it on Windows:
   ```sh
   ISCC.exe /DAppVersion=<version> installer\optimum.iss
   ```
-  It reads the files from `target\x86_64-pc-windows-gnu\release` (override with `/DBinDir=…`) and writes `target\installer\optimum-setup-<version>.exe`. From WSL, run `ISCC.exe` through interop with `$(wslpath -w installer/optimum.iss)`. No install needed: Inno's own installer accepts `/VERYSILENT /CURRENTUSER /PORTABLE=1 /DIR=<folder>`. The release workflow downloads `innosetup-6.7.3.exe` from the jrsoftware/issrc GitHub release, checks its sha256 and installs it the same way. The wizard images `installer/wizard-*.bmp` are generated from `assets/optimum-win.svg` (ADR-016).
+  It reads the files from `target\x86_64-pc-windows-gnu\release` (override with `/DBinDir=…`) and writes `target\installer\Optimum.exe`. From WSL, run `ISCC.exe` through interop with `$(wslpath -w installer/optimum.iss)`. No install needed: Inno's own installer accepts `/VERYSILENT /CURRENTUSER /PORTABLE=1 /DIR=<folder>`. The release workflow downloads `innosetup-6.7.3.exe` from the jrsoftware/issrc GitHub release, checks its sha256 and installs it the same way. The wizard images `installer/wizard-*.bmp` are generated from `assets/optimum-win.svg` (ADR-016).
 - **Not done yet:** MSIX and code signing.
