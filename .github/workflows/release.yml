@@ -2,16 +2,44 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: next
+        run: |
+          base=$(sed -n 's/^version = "\([0-9]*\.[0-9]*\)\..*"$/\1/p' Cargo.toml)
+          last=$(git tag -l "v$base.*" | sed "s/^v$base\.//" | grep -E '^[0-9]+$' | sort -n | tail -1)
+          version="$base.$(( ${last:--1} + 1 ))"
+          gh release list --limit 1000 --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' |
+            while read -r tag; do gh release delete "$tag" --yes; done
+          gh release create "v$version" --draft --target "$GITHUB_SHA" --title "Optimum $version" --notes ""
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   windows:
+    needs: version
     runs-on: windows-latest
     env:
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
@@ -31,6 +59,9 @@ jobs:
 
       - run: cargo install --locked cargo-zigbuild
 
+      - shell: bash
+        run: sed -i 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
+
       - run: cargo-zigbuild test --target $env:TARGET --workspace
       - run: cargo-zigbuild build --release --target $env:TARGET -p optimum
 
@@ -47,18 +78,16 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
+          $version = "${{ needs.version.outputs.version }}"
           & "$env:RUNNER_TEMP\inno\ISCC.exe" /Q "/DAppVersion=$version" "/O$pwd\dist" installer\optimum.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
           (Get-FileHash dist\Optimum.exe -Algorithm SHA256).Hash.ToLower() + "  Optimum.exe" | Out-File -Encoding ascii dist\Optimum.exe.sha256
 
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/Optimum.exe
-            dist/Optimum.exe.sha256
+      - shell: bash
+        run: gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.exe dist/Optimum.exe.sha256
 
   macos:
+    needs: version
     runs-on: macos-15
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.0"
@@ -73,31 +102,26 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - run: sed -i '' 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
       - run: cargo test --workspace
       - run: cargo build --release -p optimum
 
       - name: Package
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ needs.version.outputs.version }}"
           installer/macos/bundle.sh "$version" target/release/optimum dist
           installer/macos/dmg.sh dist/Optimum.app dist/Optimum.dmg
           (cd dist && shasum -a 256 Optimum.dmg > Optimum.dmg.sha256)
 
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/Optimum.dmg
-            dist/Optimum.dmg.sha256
+      - run: gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.dmg dist/Optimum.dmg.sha256
 
-  prune:
-    needs: [windows, macos]
+  publish:
+    needs: [version, windows, macos]
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
-      - name: Delete older releases
-        run: |
+      - run: |
+          tag="v${{ needs.version.outputs.version }}"
+          gh release edit "$tag" --draft=false --latest
           gh release list --limit 1000 --json tagName --jq '.[].tagName' |
-            grep -vxF "$GITHUB_REF_NAME" |
-            while read -r tag; do gh release delete "$tag" --yes; done
+            grep -vxF "$tag" |
+            while read -r old; do gh release delete "$old" --yes; done
