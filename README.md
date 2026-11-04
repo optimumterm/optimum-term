@@ -35,10 +35,10 @@ If WSL isn't installed, the window tells you how to install it.
 
 ## Install
 
-Download from the [releases page](../../releases):
+Download from the [latest release](../../releases/latest):
 
-- **`optimum-setup-<version>.exe`**: a regular setup wizard. By default it installs for the current user into `%LOCALAPPDATA%\Programs\Optimum` and doesn't need admin rights. You can uninstall it from Settings → Apps. Your settings are kept.
-- **`optimum-<version>-windows-x64.zip`**: the portable version. Unzip it anywhere and run `optimum.exe`. Keep `conpty.dll` and `OpenConsole.exe` next to it.
+- **Windows:** [`Optimum.exe`](../../releases/latest/download/Optimum.exe), a regular setup wizard. By default it installs for the current user into `%LOCALAPPDATA%\Programs\Optimum` and doesn't need admin rights. You can uninstall it from Settings → Apps. Your settings are kept.
+- **macOS:** [`Optimum.dmg`](../../releases/latest/download/Optimum.dmg), see [macOS](#macos).
 
 The builds aren't code-signed yet, so SmartScreen may warn you. Click "More info", then "Run anyway".
 
@@ -105,8 +105,8 @@ The macOS version is early and not tested much yet. It needs an Apple Silicon Ma
 
 ### Install on macOS
 
-1. Download `Optimum-<version>-macos-arm64.zip` from the [releases page](../../releases).
-2. Unzip it and move `Optimum.app` to Applications.
+1. Download [`Optimum.dmg`](../../releases/latest/download/Optimum.dmg).
+2. Open it and drag Optimum to Applications.
 3. Open Terminal and run this once:
 
    ```
