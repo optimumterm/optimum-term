@@ -440,3 +440,14 @@ ADR-style log. Each entry: decision, date, why.
   - Right Option goes through `interpretKeyEvents` as before, its text is sent and Option is consumed.
 - **Why the split:** some layouts need Option for everyday characters (German `@` is `Option+L`), and other terminals offer the same left/right split.
 
+
+## ADR-033: Supply chain and repository security
+
+- **Date:** 2026-11-05
+- **Decision:** use every free GitHub and OpenSSF tool that lets users trust the downloads and the code without trusting the maintainer. Nothing here changes the app.
+  - **Provenance:** the release jobs attest `Optimum.exe` and `Optimum.dmg` with `actions/attest` (SLSA build provenance, Sigstore-signed). Anyone can check a file with `gh attestation verify <file> --repo optimumterm/optimum-term`.
+  - **SBOM:** the publish job generates `Optimum.spdx.json` with `anchore/sbom-action` (Syft), attests it for both files and attaches it to the release.
+  - **Dependencies:** `cargo-deny` runs in CI with `deny.toml`: RustSec advisories and yanked crates fail the build; licenses limited to the permissive set the tree uses today (0BSD, Apache-2.0, BSD-3-Clause, ISC, MIT, Unicode-3.0, Unlicense, Zlib); crates.io is the only source; networking, TLS and telemetry crates (reqwest, hyper, h2, ureq, curl, rustls, openssl, sentry, opentelemetry and others) are banned, so "no network calls" is enforced by CI. Dependabot proposes weekly grouped updates for Cargo and GitHub Actions; the Ghostty submodule is not included, its pin is bumped by hand in its own commit. Dependabot alerts and security updates are on.
+  - **Code scanning:** CodeQL for Rust and GitHub Actions on every push, pull request and weekly.
+  - **Repository:** OpenSSF Scorecard runs weekly and on push, publishes its score (badge in the README). Workflows default to `contents: read` and grant write per job; every action is pinned to a commit SHA; checkouts don't keep credentials. Secret scanning with push protection and private vulnerability reporting are on (`SECURITY.md`). Rulesets: `main` can't be force-pushed or deleted (direct pushes stay allowed); `v*` tags can't be deleted or moved.
+- **Not done:** Windows code signing. SignPath Foundation signs open-source projects for free, but needs an application by the owner; it would remove the SmartScreen warning. macOS notarization needs a paid Apple account (declined). Signed commits are not required, because they'd block pushes from machines without a signing key. Pinned SHAs carry no version comment (no comments rule); Dependabot updates them anyway.

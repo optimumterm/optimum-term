@@ -22,6 +22,14 @@ export LIBCLANG_PATH=$(nix-build '<nixpkgs>' -A llvmPackages.libclang.lib --no-o
 export BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_linux_gnu="-isystem $(echo $LIBCLANG_PATH/clang/*/include) -isystem $(nix-build '<nixpkgs>' -A glibc.dev --no-out-link)/include"
 ```
 
+## Dependency check
+
+CI runs [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) with `deny.toml` (ADR-033): vulnerabilities, licenses, sources, banned networking and telemetry crates. Locally:
+
+```sh
+cargo deny check
+```
+
 ## Windows build (the product)
 
 ```sh
