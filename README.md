@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/optimumterm/optimum-term/actions/workflows/ci.yml/badge.svg)](https://github.com/optimumterm/optimum-term/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/optimumterm/optimum-term/actions/workflows/codeql.yml/badge.svg)](https://github.com/optimumterm/optimum-term/actions/workflows/codeql.yml)
+[![Fuzz](https://github.com/optimumterm/optimum-term/actions/workflows/fuzz.yml/badge.svg)](https://github.com/optimumterm/optimum-term/actions/workflows/fuzz.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/optimumterm/optimum-term/badge)](https://scorecard.dev/viewer/?uri=github.com/optimumterm/optimum-term)
 
 A minimal terminal for Windows, made mainly for WSL.
@@ -157,8 +158,8 @@ set -g extended-keys on
   gh attestation verify Optimum.exe --repo optimumterm/optimum-term
   ```
 
-  Each release also has an SBOM (`Optimum.spdx.json`) listing every dependency, and a `.sha256` for each file.
-- **Checked on every change.** [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) checks the Rust dependencies against the RustSec vulnerability database and allows only permissive licenses and crates.io as a source. [CodeQL](https://codeql.github.com) scans the code and the workflows. Dependabot proposes dependency and security updates. GitHub secret scanning blocks pushes that contain credentials.
+  The signature bundles are attached too (`Optimum.exe.sigstore.json`, `Optimum.dmg.sigstore.json`) for offline verification. Each release also has an SBOM (`Optimum.spdx.json`) listing every dependency, and a `.sha256` for each file.
+- **Checked on every change.** [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) checks the Rust dependencies against the RustSec vulnerability database and allows only permissive licenses and crates.io as a source. [CodeQL](https://codeql.github.com) scans the code and the workflows. [ClusterFuzzLite](https://google.github.io/clusterfuzzlite/) fuzzes the terminal core with arbitrary program output, and the config parser, on every change and nightly. Dependabot proposes dependency and security updates. Microsoft's ConPTY isn't stored in git: the build fetches the pinned NuGet package and checks its hashes. GitHub secret scanning blocks pushes that contain credentials.
 - **Hardened pipeline.** Workflows run with read-only permissions by default, actions are pinned to exact commits, `main` can't be force-pushed or deleted, and release tags can't be moved. The [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/optimumterm/optimum-term) rates these practices.
 
 Found a vulnerability? Report it privately, see [SECURITY.md](SECURITY.md).

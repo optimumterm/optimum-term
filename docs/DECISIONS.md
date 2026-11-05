@@ -63,10 +63,10 @@ ADR-style log. Each entry: decision, date, why.
 
 ---
 
-## ADR-008: Bundled ConPTY 1.25.260930003, vendored in the repo
+## ADR-008: Bundled ConPTY 1.25.260930003 (fetched, not vendored, since ADR-034)
 
 - **Date:** 2026-10-27
-- **Decision:** Ship `conpty.dll` and `OpenConsole.exe` (x64) from NuGet `Microsoft.Windows.Console.ConPTY` **1.25.260930003** (latest stable; MIT). The files are committed under `vendor/conpty/x64/` unmodified; `optimum-win`'s `build.rs` copies them next to the built executables. Bump in its own commit.
+- **Decision:** Ship `conpty.dll` and `OpenConsole.exe` (x64) from NuGet `Microsoft.Windows.Console.ConPTY` **1.25.260930003** (latest stable; MIT). The files were committed under `vendor/conpty/x64/` unmodified (until ADR-034); `optimum-win`'s `build.rs` copies them next to the built executables. Bump in its own commit.
   - nupkg sha256 `02b07b349af66d801159bdf9e440d4a1ce78bb951f37fc8609731665afdae7ee`
   - `conpty.dll` sha256 `feeef341d891643c62d30b6b07800bc70f0bc148f44cb8c3bee84aa557ae805a`
   - `OpenConsole.exe` sha256 `3d66b23d0a71bb8eed2b77edc8b9df9bf54ce6c8fb74c863a30e760997f80586`
@@ -451,3 +451,14 @@ ADR-style log. Each entry: decision, date, why.
   - **Code scanning:** CodeQL for Rust and GitHub Actions on every push, pull request and weekly.
   - **Repository:** OpenSSF Scorecard runs weekly and on push, publishes its score (badge in the README). Workflows default to `contents: read` and grant write per job; every action is pinned to a commit SHA; checkouts don't keep credentials. Secret scanning with push protection and private vulnerability reporting are on (`SECURITY.md`). Rulesets: `main` can't be force-pushed or deleted (direct pushes stay allowed); `v*` tags can't be deleted or moved.
 - **Not done:** Windows code signing. SignPath Foundation signs open-source projects for free, but needs an application by the owner; it would remove the SmartScreen warning. macOS notarization needs a paid Apple account (declined). Signed commits are not required, because they'd block pushes from machines without a signing key. Pinned SHAs carry no version comment (no comments rule); Dependabot updates them anyway.
+
+## ADR-034: OpenSSF Scorecard follow-ups
+
+- **Date:** 2026-11-05
+- **ConPTY out of git:** `conpty.dll` and `OpenConsole.exe` are no longer committed (Scorecard flags binaries in the source tree). `scripts/fetch-conpty.sh` downloads the pinned NuGet package `Microsoft.Windows.Console.ConPTY` 1.25.260930003 from nuget.org, checks the package and both files against the sha256 values of ADR-008, and extracts them into `vendor/conpty/x64/` (git-ignored). It does nothing when the right files are already there. CI and the release run it before building for Windows; locally it is run once. `optimum-win`'s `build.rs` still only copies the files and fails with a hint to run the script when they are missing. Not done in `build.rs`, because a download there would need HTTP crates, which `deny.toml` bans, and would make every build depend on the network. This reverses ADR-008's "why vendored"; the version and hashes are unchanged.
+- **Signed releases:** each release also carries the Sigstore bundle of its provenance attestation as `Optimum.exe.sigstore.json` and `Optimum.dmg.sigstore.json`, so it can be verified offline (`gh attestation verify <file> --bundle <file>.sigstore.json --repo optimumterm/optimum-term`) and Scorecard sees signed releases. Releases now get generated notes (`--generate-notes`).
+- **Fuzzing:** ClusterFuzzLite with AddressSanitizer (`.clusterfuzzlite/`, `.github/workflows/fuzz.yml`), running `cargo fuzz` targets from `fuzz/` (its own workspace, excluded from the main one): `terminal` writes arbitrary bytes into a libghostty-vt terminal (with resizes and render-state updates), which is the real attack surface of a terminal (program output); `config` feeds arbitrary text to `Config::parse` and `parse_color`. Short code-change runs on pushes and pull requests, a 30-minute batch run nightly; findings go to code scanning as SARIF. Limitation: libghostty-vt is Zig and is not built with sanitizer coverage, so the `terminal` target catches crashes and aborts in it (Zig safety checks, ASan in the Rust wrapper) but its coverage guidance only reaches the Rust side; instrumenting the Zig build is a possible later step. Verified locally: both targets build in the pinned image and ran 60 s each without findings. The Docker image is pinned by digest; Zig 0.17.0 and libclang 18.1.1 (for bindgen; the base image has clang but no libclang) are downloaded with sha256 checks.
+- **Security policy:** `SECURITY.md` gives the full reporting URL, response time (7 days), fix and disclosure timeline (usually 30, at most 90 days) and scope. `CONTRIBUTING.md` states what a change needs (format, clippy, tests with new behaviour, cargo-deny, commit style).
+- **OpenSSF Best Practices badge:** answered by the owner on bestpractices.dev.
+- **Not pursued:** Scorecard's Branch-Protection (required reviews and status checks) and Code-Review (approved pull requests) would forbid direct pushes to `main`, which a single-maintainer project relies on.
+

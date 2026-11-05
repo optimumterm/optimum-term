@@ -22,6 +22,16 @@ export LIBCLANG_PATH=$(nix-build '<nixpkgs>' -A llvmPackages.libclang.lib --no-o
 export BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_linux_gnu="-isystem $(echo $LIBCLANG_PATH/clang/*/include) -isystem $(nix-build '<nixpkgs>' -A glibc.dev --no-out-link)/include"
 ```
 
+## Fuzzing
+
+`fuzz/` holds `cargo fuzz` targets (ADR-034): `terminal` (arbitrary program output into libghostty-vt) and `config` (config parsing). CI runs them through ClusterFuzzLite. Locally, with Docker:
+
+```sh
+docker build -t optimum-cflite -f .clusterfuzzlite/Dockerfile .
+docker run --rm -e SANITIZER=address -e FUZZING_ENGINE=libfuzzer -e ARCHITECTURE=x86_64 -e FUZZING_LANGUAGE=rust -v "$PWD/target/fuzz-out:/out" optimum-cflite compile
+docker run --rm -v "$PWD/target/fuzz-out:/out" optimum-cflite /out/terminal -max_total_time=60
+```
+
 ## Dependency check
 
 CI runs [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) with `deny.toml` (ADR-033): vulnerabilities, licenses, sources, banned networking and telemetry crates. Locally:
@@ -31,6 +41,13 @@ cargo deny check
 ```
 
 ## Windows build (the product)
+
+The bundled ConPTY is not in git. Fetch the pinned, hash-checked files once (ADR-034):
+
+```sh
+scripts/fetch-conpty.sh
+```
+
 
 ```sh
 cargo-zigbuild test   --target x86_64-pc-windows-gnu
