@@ -25,6 +25,11 @@ fn main() {
     for name in CONPTY_FILES {
         let from = source.join(name);
         println!("cargo:rerun-if-changed={}", from.display());
+        assert!(
+            from.is_file(),
+            "{} is missing; run scripts/fetch-conpty.sh",
+            from.display()
+        );
         for dir in [profile_dir.clone(), profile_dir.join("deps")] {
             fs::create_dir_all(&dir).unwrap();
             fs::copy(&from, dir.join(name))

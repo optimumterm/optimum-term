@@ -50,6 +50,9 @@ jobs:
 
       - run: cargo install --locked cargo-zigbuild
 
+      - shell: bash
+        run: scripts/fetch-conpty.sh
+
       - run: cargo fmt --all --check
       - run: cargo-zigbuild clippy --target $env:TARGET --workspace --all-targets -- -D warnings
       - run: cargo-zigbuild test --target $env:TARGET --workspace

@@ -75,6 +75,9 @@ jobs:
       - run: cargo install --locked cargo-zigbuild
 
       - shell: bash
+        run: scripts/fetch-conpty.sh
+
+      - shell: bash
         run: sed -i 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
 
       - run: cargo-zigbuild build --release --target $env:TARGET -p optimum
