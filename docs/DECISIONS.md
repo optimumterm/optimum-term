@@ -423,3 +423,10 @@ ADR-style log. Each entry: decision, date, why.
 - **Automatic releases:** every push to `main` that changes more than Markdown or `docs/` makes a release; there is no manual tagging. CI skips such pushes too. The release workflow starts only after CI passed on that commit (`workflow_run`), checks out exactly that commit and only builds and packages, so nothing runs twice and a release never comes from code that failed clippy or tests. The version is `<major>.<minor>` from the root `Cargo.toml` plus a patch one above the highest matching tag. The release is created as a draft, the build jobs upload into it, and it is published (which creates the tag) only when both succeed, so a failed build never becomes the latest release. Leftover drafts from failed runs are deleted at the start of the next run. Runs share one concurrency group, so two pushes can't pick the same version.
 - **Why:** the owner wants no old versions around: one current build, simple names, and a release whenever `main` changes.
 
+
+## ADR-031: macOS privacy usage descriptions
+
+- **Date:** 2026-11-05
+- **Problem:** macOS attributes privacy requests from programs in the terminal (the shell, `claude` voice input, `ffmpeg` with a camera) to the terminal app. Without a usage description for a resource in `Info.plist`, macOS shows no prompt, doesn't list the app under that resource in Privacy & Security, and silently denies access. Found on a real Mac: voice input in Claude Code inside Optimum got no microphone.
+- **Decision:** `installer/macos/Info.plist` carries a usage description for every protected resource a command-line program may ask for: Apple Events, Bluetooth, calendars, camera, contacts, local network, location, microphone, motion, photo library, reminders, speech recognition, system administration. Each says "A program running in Optimum wants to …". This is the same set other terminals ship. Optimum itself requests nothing; the keys only let macOS ask the user on behalf of programs.
+- **Ad-hoc signing:** permissions granted to an ad-hoc signed app are tied to that exact build, so macOS may ask again after an update.
