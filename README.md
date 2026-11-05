@@ -131,7 +131,7 @@ It works like the Windows version, with Mac shortcuts:
 | Close, minimize, hide, quit | `Cmd+W`, `Cmd+M`, `Cmd+H`, `Cmd+Q` |
 | Settings | `Cmd+,` opens `~/Library/Application Support/Optimum/config.toml` |
 
-The Option key types characters (like `å`); it is not used as Meta.
+The left Option key works as Alt (Meta), so shortcuts like `Alt+h` in tmux, zellij or the shell work. The right Option key types characters (like `å` or `@` on some layouts).
 
 ## tmux
 

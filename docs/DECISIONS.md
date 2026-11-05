@@ -405,7 +405,7 @@ ADR-style log. Each entry: decision, date, why.
   - **Menu:** only the app menu: Settings… (`Cmd+,`), Hide (`Cmd+H`), Quit (`Cmd+Q`).
   - **Rendering:** a `CAMetalLayer` in sRGB, BGRA8, one instanced draw of the shared `Scene` (ADR-028) with an MSL shader compiled at start-up. CoreText implements `GlyphSource`: the configured family if installed, otherwise the bundled JetBrains Mono Nerd Font (registered from memory), otherwise Menlo; fallback through `CTFontCreateForString`; colour fonts (emoji) are rasterized in RGBA and drawn as `COLOR`. Glyphs are grayscale with font smoothing off; clarity tuning is M7.
   - **Font size:** points are logical pixels, so `size = 12` is 12 pt at 1× and 24 device pixels on Retina.
-  - **Input:** `keyDown` runs `interpretKeyEvents` so dead keys and IME go through `NSTextInputClient`; the collected text, the physical key (from the ANSI key code), the modifiers and the unshifted character go to libghostty-vt's key encoder. Option produces characters (it is not Meta). Marked text is drawn as the preedit at the cursor.
+  - **Input:** `keyDown` runs `interpretKeyEvents` so dead keys and IME go through `NSTextInputClient`; the collected text, the physical key (from the ANSI key code), the modifiers and the unshifted character go to libghostty-vt's key encoder. Option produces characters (it is not Meta); changed by ADR-032. Marked text is drawn as the preedit at the cursor.
   - **Shortcuts** (macOS equivalents of ADR-026/027): `Cmd+C` copies the selection, `Cmd+V` pastes, `Cmd+A` selects all, `Shift+arrows` and `Cmd+Shift+←/→` extend a selection, `Esc` clears it, `Shift+PageUp/PageDown` and `Cmd+PageUp/PageDown` page, `Cmd+↑/↓` scroll a line, `Cmd+Home/End` jump, `Cmd+=`/`Cmd+-`/`Cmd+0` zoom, `Ctrl+Cmd+F` full screen, `Cmd+W` closes, `Cmd+M` minimizes, `Cmd+,` settings.
   - **Mouse:** select-to-copy, double/triple click, Shift+click extends, right-click pastes, Shift overrides app mouse mode, wheel and trackpad scroll the scrollback or report to the app.
   - **Settings:** `~/Library/Application Support/Optimum/config.toml`, opened with `open -t`, reloaded by polling its modification time every 400 ms.
@@ -430,3 +430,13 @@ ADR-style log. Each entry: decision, date, why.
 - **Problem:** macOS attributes privacy requests from programs in the terminal (the shell, `claude` voice input, `ffmpeg` with a camera) to the terminal app. Without a usage description for a resource in `Info.plist`, macOS shows no prompt, doesn't list the app under that resource in Privacy & Security, and silently denies access. Found on a real Mac: voice input in Claude Code inside Optimum got no microphone.
 - **Decision:** `installer/macos/Info.plist` carries a usage description for every protected resource a command-line program may ask for: Apple Events, Bluetooth, calendars, camera, contacts, local network, location, microphone, motion, photo library, reminders, speech recognition, system administration. Each says "A program running in Optimum wants to …". This is the same set other terminals ship. Optimum itself requests nothing; the keys only let macOS ask the user on behalf of programs.
 - **Ad-hoc signing:** permissions granted to an ad-hoc signed app are tied to that exact build, so macOS may ask again after an update.
+
+## ADR-032: macOS left Option is Alt
+
+- **Date:** 2026-11-05
+- **Problem:** with Option always typing characters (ADR-029), `Option+h` sends `˙`, so multiplexer and shell bindings on Alt (herdr, tmux, zellij, readline) never fire. Found on a real Mac with herdr bound to `alt+h/l/j/k`.
+- **Decision:** the **left** Option key is Alt, the **right** Option key types characters. Fixed behaviour, not a config option (config is look and feel only).
+  - The view checks the modifier sides: left Option without the right one skips `interpretKeyEvents` (no dead keys, no IME) and takes the key's text from `charactersByApplyingModifiers` with Option removed, so Shift and the layout still apply. Option is not marked consumed, and the key encoder, set to `GHOSTTY_OPTION_AS_ALT_LEFT`, sends the ESC prefix (or the Kitty Alt modifier).
+  - Right Option goes through `interpretKeyEvents` as before, its text is sent and Option is consumed.
+- **Why the split:** some layouts need Option for everyday characters (German `@` is `Option+L`), and other terminals offer the same left/right split.
+
