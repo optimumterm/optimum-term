@@ -30,6 +30,32 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>A program running in Optimum wants to control other apps.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>A program running in Optimum wants to use Bluetooth.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>A program running in Optimum wants to access your calendars.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>A program running in Optimum wants to use the camera.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>A program running in Optimum wants to access your contacts.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>A program running in Optimum wants to access the local network.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>A program running in Optimum wants to access your location.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A program running in Optimum wants to use the microphone.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>A program running in Optimum wants to access motion data.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>A program running in Optimum wants to access your photo library.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>A program running in Optimum wants to access your reminders.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>A program running in Optimum wants to use speech recognition.</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>A program running in Optimum wants to modify system settings.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
