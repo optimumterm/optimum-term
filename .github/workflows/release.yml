@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release
@@ -24,13 +24,16 @@ jobs:
   version:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.next.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.SHA }}
           fetch-depth: 0
+          persist-credentials: false
 
       - id: next
         run: |
@@ -45,21 +48,28 @@ jobs:
   windows:
     needs: version
     runs-on: windows-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     env:
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
       TARGET: x86_64-pc-windows-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.SHA }}
           submodules: true
+          persist-credentials: false
 
-      - uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         with:
           version: 0.17.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
         with:
+          toolchain: stable
           targets: x86_64-pc-windows-gnu
 
       - run: cargo install --locked cargo-zigbuild
@@ -87,25 +97,37 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           (Get-FileHash dist\Optimum.exe -Algorithm SHA256).Hash.ToLower() + "  Optimum.exe" | Out-File -Encoding ascii dist\Optimum.exe.sha256
 
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: dist/Optimum.exe
+
       - shell: bash
         run: gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.exe dist/Optimum.exe.sha256
 
   macos:
     needs: version
     runs-on: macos-15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.SHA }}
           submodules: true
+          persist-credentials: false
 
-      - uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         with:
           version: 0.17.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
 
       - run: sed -i '' 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
       - run: cargo build --release -p optimum
@@ -117,14 +139,49 @@ jobs:
           installer/macos/dmg.sh dist/Optimum.app dist/Optimum.dmg
           (cd dist && shasum -a 256 Optimum.dmg > Optimum.dmg.sha256)
 
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: dist/Optimum.dmg
+
       - run: gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.dmg dist/Optimum.dmg.sha256
 
   publish:
     needs: [version, windows, macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      TAG: v${{ needs.version.outputs.version }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          path: .
+          format: spdx-json
+          output-file: Optimum.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - run: gh release download "$TAG" --dir dist --pattern Optimum.exe --pattern Optimum.dmg
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            dist/Optimum.exe
+            dist/Optimum.dmg
+          sbom-path: Optimum.spdx.json
+
+      - run: gh release upload "$TAG" Optimum.spdx.json
+
       - run: |
-          tag="v${{ needs.version.outputs.version }}"
+          tag="$TAG"
           gh release edit "$tag" --draft=false --latest
           gh release list --limit 1000 --json tagName --jq '.[].tagName' |
             grep -vxF "$tag" |
