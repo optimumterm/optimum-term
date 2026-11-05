@@ -262,9 +262,15 @@ impl KeyEncoder {
         out: &mut Vec<u8>,
     ) -> Result<(), Error> {
         let (raw, ev) = (self.raw.as_ptr(), self.event.as_ptr());
-        // SAFETY: the encoder, the event and the terminal are live; `event.text` outlives the encode call below, and the pointer is cleared before returning.
+        let option_as_alt: sys::GhosttyOptionAsAlt = sys::GHOSTTY_OPTION_AS_ALT_LEFT;
+        // SAFETY: the encoder, the event and the terminal are live; `option_as_alt` is read during setopt only; `event.text` outlives the encode call below, and the pointer is cleared before returning.
         unsafe {
             sys::ghostty_key_encoder_setopt_from_terminal(raw, terminal.raw.as_ptr());
+            sys::ghostty_key_encoder_setopt(
+                raw,
+                sys::GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT,
+                (&raw const option_as_alt).cast(),
+            );
             sys::ghostty_key_event_set_action(ev, event.action.raw());
             sys::ghostty_key_event_set_key(ev, event.key as sys::GhosttyKey);
             sys::ghostty_key_event_set_mods(ev, event.mods.0);
