@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/ghostty-vt-sys", "crates/ghostty-vt", "crates/optimum-core", "crates/optimum-win", "crates/optimum-mac", "crates/optimum", "crates/optimum-icon"]
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"

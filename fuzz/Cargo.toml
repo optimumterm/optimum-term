@@ -1,0 +1,29 @@
+[package]
+name = "optimum-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ghostty-vt = { path = "../crates/ghostty-vt" }
+optimum-core = { path = "../crates/optimum-core" }
+
+[[bin]]
+name = "config"
+path = "fuzz_targets/config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "terminal"
+path = "fuzz_targets/terminal.rs"
+test = false
+doc = false
+bench = false
