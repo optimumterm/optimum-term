@@ -7,6 +7,7 @@ const OPTION: usize = 1 << 19;
 const COMMAND: usize = 1 << 20;
 const DEVICE_RIGHT_SHIFT: usize = 0x04;
 const DEVICE_RIGHT_CONTROL: usize = 0x2000;
+const DEVICE_LEFT_OPTION: usize = 0x20;
 const DEVICE_RIGHT_OPTION: usize = 0x40;
 const DEVICE_RIGHT_COMMAND: usize = 0x10;
 
@@ -56,6 +57,14 @@ pub(crate) fn mods(flags: usize) -> Mods {
     mods
 }
 
+pub(crate) fn option_as_alt(mods: Mods) -> bool {
+    mods.contains(Mods::ALT) && !mods.contains(Mods::RIGHT_ALT)
+}
+
+pub(crate) fn without_option(flags: usize) -> usize {
+    flags & !(OPTION | DEVICE_LEFT_OPTION | DEVICE_RIGHT_OPTION)
+}
+
 pub(crate) fn printable(text: &str) -> bool {
     !text.is_empty() && !text.chars().any(|c| c.is_control() || is_function_key(c))
 }
@@ -84,7 +93,7 @@ pub(crate) fn event<'a>(
         if mods.contains(Mods::SHIFT) {
             consumed |= Mods::SHIFT;
         }
-        if mods.contains(Mods::ALT) && text == typed {
+        if mods.contains(Mods::RIGHT_ALT) && text == typed {
             consumed |= Mods::ALT;
         }
     }
@@ -325,9 +334,19 @@ mod tests {
     }
 
     #[test]
-    fn option_text_consumes_option() {
-        let e = event(Key::E, KeyAction::Press, Mods::ALT, "é", "e", Some('e'));
+    fn right_option_text_consumes_option() {
+        let mods = Mods::ALT | Mods::RIGHT_ALT;
+        let e = event(Key::E, KeyAction::Press, mods, "é", "e", Some('e'));
         assert_eq!((e.text, e.consumed), ("é", Mods::ALT));
+    }
+
+    #[test]
+    fn left_option_is_alt() {
+        assert!(option_as_alt(mods(OPTION | DEVICE_LEFT_OPTION)));
+        assert!(!option_as_alt(mods(OPTION | DEVICE_RIGHT_OPTION)));
+        assert_eq!(without_option(OPTION | DEVICE_LEFT_OPTION | SHIFT), SHIFT);
+        let e = event(Key::H, KeyAction::Press, Mods::ALT, "h", "h", Some('h'));
+        assert_eq!((e.text, e.consumed), ("h", Mods::NONE));
     }
 
     #[test]

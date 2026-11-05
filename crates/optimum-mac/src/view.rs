@@ -4,8 +4,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
 use objc2::{DefinedClass, MainThreadOnly, Message, define_class, msg_send};
 use objc2_app_kit::{
-    NSApplication, NSApplicationDelegate, NSEvent, NSResponder, NSTextInputClient, NSView,
-    NSWindowDelegate,
+    NSApplication, NSApplicationDelegate, NSEvent, NSEventModifierFlags, NSResponder,
+    NSTextInputClient, NSView, NSWindowDelegate,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSAttributedString, NSAttributedStringKey, NSNotFound,
@@ -89,6 +89,20 @@ define_class!(
                 return;
             }
             let composing = with(|app| app.has_preedit()).unwrap_or(false);
+            let action = if event.isARepeat() {
+                KeyAction::Repeat
+            } else {
+                KeyAction::Press
+            };
+            if keyboard::option_as_alt(mods) && !composing {
+                let flags = NSEventModifierFlags(keyboard::without_option(event.modifierFlags().0));
+                let typed = event
+                    .charactersByApplyingModifiers(flags)
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                act(|app| app.key(event, action, &typed));
+                return;
+            }
             *self.ivars().input.borrow_mut() = KeyInput {
                 active: true,
                 ..KeyInput::default()
@@ -102,11 +116,6 @@ define_class!(
                 }
                 return;
             }
-            let action = if event.isARepeat() {
-                KeyAction::Repeat
-            } else {
-                KeyAction::Press
-            };
             act(|app| app.key(event, action, &input.text));
         }
 
