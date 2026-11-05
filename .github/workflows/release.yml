@@ -1,9 +1,10 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 permissions:
@@ -17,15 +18,18 @@ env:
   CARGO_TERM_COLOR: always
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   version:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.next.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.SHA }}
           fetch-depth: 0
 
       - id: next
@@ -35,7 +39,7 @@ jobs:
           version="$base.$(( ${last:--1} + 1 ))"
           gh release list --limit 1000 --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' |
             while read -r tag; do gh release delete "$tag" --yes; done
-          gh release create "v$version" --draft --target "$GITHUB_SHA" --title "Optimum $version" --notes ""
+          gh release create "v$version" --draft --target "$SHA" --title "Optimum $version" --notes ""
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   windows:
@@ -47,6 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.SHA }}
           submodules: true
 
       - uses: mlugg/setup-zig@v2
@@ -62,7 +67,6 @@ jobs:
       - shell: bash
         run: sed -i 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
 
-      - run: cargo-zigbuild test --target $env:TARGET --workspace
       - run: cargo-zigbuild build --release --target $env:TARGET -p optimum
 
       - name: Install Inno Setup
@@ -94,6 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.SHA }}
           submodules: true
 
       - uses: mlugg/setup-zig@v2
@@ -103,7 +108,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - run: sed -i '' 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
-      - run: cargo test --workspace
       - run: cargo build --release -p optimum
 
       - name: Package
