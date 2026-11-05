@@ -42,7 +42,7 @@ jobs:
           version="$base.$(( ${last:--1} + 1 ))"
           gh release list --limit 1000 --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' |
             while read -r tag; do gh release delete "$tag" --yes; done
-          gh release create "v$version" --draft --target "$SHA" --title "Optimum $version" --notes ""
+          gh release create "v$version" --draft --target "$SHA" --title "Optimum $version" --generate-notes
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   windows:
@@ -100,12 +100,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           (Get-FileHash dist\Optimum.exe -Algorithm SHA256).Hash.ToLower() + "  Optimum.exe" | Out-File -Encoding ascii dist\Optimum.exe.sha256
 
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+      - id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: dist/Optimum.exe
 
       - shell: bash
-        run: gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.exe dist/Optimum.exe.sha256
+        run: |
+          cp "${{ steps.provenance.outputs.bundle-path }}" dist/Optimum.exe.sigstore.json
+          gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.exe dist/Optimum.exe.sha256 dist/Optimum.exe.sigstore.json
 
   macos:
     needs: version
@@ -142,11 +145,14 @@ jobs:
           installer/macos/dmg.sh dist/Optimum.app dist/Optimum.dmg
           (cd dist && shasum -a 256 Optimum.dmg > Optimum.dmg.sha256)
 
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+      - id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: dist/Optimum.dmg
 
-      - run: gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.dmg dist/Optimum.dmg.sha256
+      - run: |
+          cp "${{ steps.provenance.outputs.bundle-path }}" dist/Optimum.dmg.sigstore.json
+          gh release upload "v${{ needs.version.outputs.version }}" dist/Optimum.dmg dist/Optimum.dmg.sha256 dist/Optimum.dmg.sigstore.json
 
   publish:
     needs: [version, windows, macos]
