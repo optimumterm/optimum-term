@@ -462,3 +462,12 @@ ADR-style log. Each entry: decision, date, why.
 - **OpenSSF Best Practices badge:** answered by the owner on bestpractices.dev.
 - **Not pursued:** Scorecard's Branch-Protection (required reviews and status checks) and Code-Review (approved pull requests) would forbid direct pushes to `main`, which a single-maintainer project relies on.
 
+---
+
+## ADR-035: macOS 26 icon with light and dark appearances
+
+- **Date:** 2026-11-11
+- **Source:** `assets/Optimum.icon`, an Icon Composer document supplied by the owner and committed as-is: `icon.json` plus five SVG layers (the nested rounded squares, `#2E22A8 #5B3DF0 #9A6BFF #FF86DC #FFF0FA`, each its own glass group). The background is a light lavender gradient (`#F1EEFF` → `#D6CCFF`) in the default appearance and `system-dark` in the dark one; shadows switch from layer-colored to neutral in dark. Tinted and clear appearances are derived by the system.
+- **Build:** `installer/macos/bundle.sh` compiles it with `xcrun actool --app-icon Optimum` into `Assets.car` in `Contents/Resources`; `Info.plist` names it with `CFBundleIconName = Optimum`. Only `Assets.car` is kept: the `Optimum.icns` actool also emits would collide with `optimum.icns` on the case-insensitive file system.
+- **Older macOS:** 13–15 ignore the asset catalog icon and keep using `CFBundleIconFile` (`optimum.icns`, ADR-016). The DMG volume icon stays `optimum.icns` too.
+- **Toolchain:** `.icon` needs Xcode 26's `actool`. The `macos-15` runner defaults to an older Xcode, so CI and the release select the newest installed `Xcode_26*.app` first. Bundling locally needs Xcode 26 (Command Line Tools alone have no `actool`); without it the script fails rather than silently shipping an app without the new icon.
