@@ -10,6 +10,8 @@
 	<string>optimum</string>
 	<key>CFBundleIconFile</key>
 	<string>optimum</string>
+	<key>CFBundleIconName</key>
+	<string>Optimum</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.optimum.Optimum</string>
 	<key>CFBundleInfoDictionaryVersion</key>
