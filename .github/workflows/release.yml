@@ -138,6 +138,9 @@ jobs:
       - run: sed -i '' 's/^version = ".*"$/version = "${{ needs.version.outputs.version }}"/' Cargo.toml
       - run: cargo build --release -p optimum
 
+      - name: Select Xcode 26
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+
       - name: Package
         run: |
           version="${{ needs.version.outputs.version }}"
